@@ -330,6 +330,7 @@ def run_training():
             ax2.set_title('trainning acc')
             ax1.grid(True)
             ax2.grid(True)
+            plt.savefig('./img/demo_1_1_training.pdf', bbox_inches='tight')
     return
  
     
@@ -375,6 +376,7 @@ def run_test():
                 
                 print('test_loss = %.2f, test_accuracy = %.2f.' 
                                   %(test_loss,test_acc))
+            fig = plt.figure()
             plt.title('Test Data')
             plt.xlabel('Chronological Age')
             plt.ylabel('Brain Age (Predicted)')
@@ -383,6 +385,8 @@ def run_test():
             for i in range(len(test_labels)):
                 plt.scatter(test_labels[i], test_predicted_ages[i], c = 'blue',s=1)
             plt.gca().set_aspect('equal', adjustable='box')
+            plt.savefig('./img/demo_1_1_test.pdf', bbox_inches='tight')
+            plt.show()
     return
 
 
