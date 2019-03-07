@@ -8,6 +8,7 @@ Dataset: IXI
 Using 3D-CNN model code of my own
 '''
 from preprocess import *
+from my_tools import *
 import tensorflow as tf
 from PIL import Image
 import matplotlib.pyplot as plt
@@ -331,6 +332,13 @@ def run_training():
             ax1.grid(True)
             ax2.grid(True)
             plt.savefig('./img/demo_1_1_training.pdf', bbox_inches='tight')
+            
+            plt_data_path_name = './img/demo_1_1_pltdata_' + time_now()
+            if not os.path.exists(plt_data_path_name + '.npy'):
+                np.save(plt_data_path_name, np.array([losses,acces]))
+            else:
+                print(plt_data_path_name + '.npy exists already.')
+            
     return
  
     

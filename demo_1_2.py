@@ -9,6 +9,7 @@ Using ruyi's model code
 '''
 
 from preprocess import *
+from my_tools import *
 import tensorflow as tf
 from PIL import Image
 import matplotlib.pyplot as plt
@@ -245,6 +246,12 @@ def run_training():
             ax1.set_title('trainning loss')
             ax1.grid(True)
             plt.savefig('./img/demo_1_2_training.pdf', bbox_inches='tight')
+            
+            plt_data_path_name = './img/demo_1_2_pltdata_' + time_now()
+            if not os.path.exists(plt_data_path_name + '.npy'):
+                np.save(plt_data_path_name, np.array([losses,acces]))
+            else:
+                print(plt_data_path_name + '.npy exists already.')
     return
  
     

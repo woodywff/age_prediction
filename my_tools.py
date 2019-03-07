@@ -8,6 +8,7 @@ import nibabel as nib
 import pdb
 import scipy.ndimage
 import matplotlib.pyplot as plt
+import time
 
 def print2d(npy_img,save=False,save_name='./test.jpg'):
     '''
@@ -36,6 +37,12 @@ def print2d(npy_img,save=False,save_name='./test.jpg'):
         plt.savefig(save_name)
     return
 
+def printimg(npy_img,size=10):
+    f, (ax1) = plt.subplots(1, 1, figsize=(size,size))
+    ax1.imshow(npy_img)
+    ax1.axis('off')
+    return
+
 def print_sep(something='-'):
     print('----------------------------------------',something,'----------------------------------------')
     return
@@ -45,3 +52,6 @@ def rot_clockwise(arr,n=1):
     return np.rot90(arr,n,(0,2))
 def rot_anticlockwise(arr,n=1):
     return np.rot90(arr,n,(2,0))
+
+def time_now():
+    return time.strftime('%Y.%m.%d.%H:%M:%S',time.localtime(time.time()))
