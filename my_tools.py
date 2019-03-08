@@ -37,9 +37,10 @@ def print2d(npy_img,save=False,save_name='./test.jpg'):
         plt.savefig(save_name)
     return
 
-def printimg(npy_img,size=10):
+def printimg(filename,size=10):
     f, (ax1) = plt.subplots(1, 1, figsize=(size,size))
-    ax1.imshow(npy_img)
+    npy = plt.imread(filename)
+    ax1.imshow(npy)
     ax1.axis('off')
     return
 

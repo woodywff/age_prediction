@@ -246,10 +246,11 @@ def run_training():
             ax1.set_title('trainning loss')
             ax1.grid(True)
             plt.savefig('./img/demo_1_2_training.pdf', bbox_inches='tight')
+            plt.savefig('./img/demo_1_2_training.png', bbox_inches='tight')
             
             plt_data_path_name = './img/demo_1_2_pltdata_' + time_now()
             if not os.path.exists(plt_data_path_name + '.npy'):
-                np.save(plt_data_path_name, np.array([losses,acces]))
+                np.save(plt_data_path_name, np.array([steps,losses,test_steps,test_losses]))
             else:
                 print(plt_data_path_name + '.npy exists already.')
     return
@@ -301,6 +302,7 @@ def run_test():
                 plt.scatter(test_labels[i], test_predicted_ages[i], c = 'blue',s=1)
             plt.gca().set_aspect('equal', adjustable='box')
             plt.savefig('./img/demo_1_2_test.pdf', bbox_inches='tight')
+            plt.savefig('./img/demo_1_2_test.png', bbox_inches='tight')
             plt.show()
     return
 
@@ -310,7 +312,8 @@ def main(_):
     arr = np.load('./IXI_npy/mean_npy.npy')
     FLAGS.arr_shape = arr.shape
     
-    run_training()
+    if not FLAGS.for_test:
+        run_training()
     run_test()
 
 
@@ -349,6 +352,10 @@ if __name__ == '__main__':
                        type=float,
                        default=500.0,
                        help='The minimum test loss value under which the model would be saved.')
+    parser.add_argument('--for_test',
+                       type=bool,
+                       default=False,
+                       help='If it is True, the program only runs the test part.')
 #     parser.add_argument(
 #       '--hidden1',
 #       type=int,
