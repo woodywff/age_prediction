@@ -10,7 +10,7 @@ import scipy.ndimage
 import matplotlib.pyplot as plt
 import time
 
-def print2d(npy_img,save=False,save_name='./test.jpg'):
+def print2d(npy_img,save=False,save_name='./test.jpg',axis='off'):
     '''
     plot 2d mri images in Sagittal, Coronal and Axial dimension.
     img: 3d ndarray
@@ -21,13 +21,13 @@ def print2d(npy_img,save=False,save_name='./test.jpg'):
 
     img = npy_img[:,:,round(dim[2]/2)]
     ax1.imshow(np.rot90(img), cmap=plt.cm.gray)
-    ax1.axis('off')
+    ax1.axis(axis)
     img = npy_img[:,round(dim[1]/2),:]
     ax2.imshow(img, cmap=plt.cm.gray)
-    ax2.axis('off')
+    ax2.axis(axis)
     img = npy_img[round(dim[0]/2),:,:]
     ax3.imshow(np.rot90(img), cmap=plt.cm.gray)
-    ax3.axis('off')
+    ax3.axis(axis)
     # plt.subplot(131); plt.imshow(np.rot90(img), cmap=plt.cm.gray)
     # img = npy_img[:,65,:]
     # plt.subplot(132); plt.imshow(img, cmap=plt.cm.gray)
