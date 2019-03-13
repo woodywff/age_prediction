@@ -400,6 +400,8 @@ def run_test():
     return
 
 
+
+
 def main(_):
 #     pdb.set_trace()
     arr = np.load('./data_npy/mean_npy.npy')

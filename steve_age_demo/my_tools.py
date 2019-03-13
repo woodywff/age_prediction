@@ -19,19 +19,19 @@ def print2d(npy_img,save=False,save_name='./test.jpg'):
     print('Dimension: ',npy_img.shape)
     f, (ax1, ax2,ax3) = plt.subplots(1, 3, figsize=(15,5))
 
-#     img = npy_img[:,:,round(dim[2]/2)]
-    img = npy_img[87,:,:]
+    img = npy_img[round(dim[0]/2),:,:]
+#     img = npy_img[87,:,:]
     ax1.imshow(np.rot90(img), cmap=plt.cm.gray)
     ax1.set_title('Sagittal',fontsize=15)
 #     ax1.imshow(img, cmap=plt.cm.gray)
     ax1.axis('off')
-#     img = npy_img[:,round(dim[1]/2),:]
-    img = npy_img[:,123,:]
+    img = npy_img[:,round(dim[1]/2),:]
+#     img = npy_img[:,123,:]
     ax2.imshow(np.rot90(img), cmap=plt.cm.gray)
     ax2.set_title('Coronal',fontsize=15)
     ax2.axis('off')
-#     img = npy_img[round(dim[0]/2),:,:]
-    img = npy_img[:,:,154]
+    img = npy_img[:,:,round(dim[2]/2)]
+#     img = npy_img[:,:,154]
     ax3.imshow(np.rot90(img), cmap=plt.cm.gray)
     ax3.set_title('Axial',fontsize=15)
 #     ax3.imshow(img, cmap=plt.cm.gray)
