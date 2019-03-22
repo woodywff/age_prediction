@@ -1,14 +1,12 @@
 '''
 Replication of Ruyi's code.
-Dataset: IXI
+Dataset: Steve normalized
 10% for test, 90% for training. (Option: k-folds cross validation, not implemented yet.)
 
-# after tar IXI dataset
 # rename files
 # get phenotypics.csv
 # get training.csv test.csv
 # get preprocessed .npy files. details of preprocess please refer to the functions.
-
 '''
 
 import xlrd
@@ -221,14 +219,14 @@ def inner_preprocess_1(nii_file):
 #     print('original image shape: ',npy_img.shape)
 #     resampled_img = resample(npy_img, pixdim, [2,2,2])
 #     print('resampled img shape: ',resampled_img.shape)
-    crop_padded_img = crop_pad(npy_img,DESIRED_SHAPE_origin)
+#     crop_padded_img = crop_pad(npy_img,DESIRED_SHAPE_origin)
 #     print('crop and padded img shape: ', crop_padded_img.shape)
-    crop_padded_img = np.round(crop_padded_img)
-    resampled_img = resample(crop_padded_img, pixdim, [2,2,2])
-    crop_padded_img2 = crop_pad(resampled_img,DESIRED_SHAPE_resample)
+#     crop_padded_img = np.round(crop_padded_img)
+#     resampled_img = resample(crop_padded_img, pixdim, [2,2,2])
+#     crop_padded_img2 = crop_pad(resampled_img,DESIRED_SHAPE_resample)
 #     print('crop and padded img shape: ', crop_padded_img.shape)
-    crop_padded_img2 = np.round(crop_padded_img2)
-    return crop_padded_img2.astype(int)
+#     crop_padded_img2 = np.round(crop_padded_img2)
+    return npy_img.astype(int)
 
 def preprocess_2(target_dir_origin,target_dir_mean):
     '''
@@ -393,7 +391,7 @@ def preprocess_main():
     # get training.csv test.csv
     gen_training_test_csv()
     # get preprocessed .npy files
-    source_dir = '/media/woody/Elements/Steve_age_data/ANAT'
+    source_dir = '/media/woody/Elements/Steve_age_data/ANAT_normalized/'
     target_dir = './data_npy'
     gen_npy(source_dir,target_dir)
     # get .tfrecords ready
