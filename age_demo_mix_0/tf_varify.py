@@ -1,5 +1,5 @@
 '''
-
+This .py provides the process of check the compliance between the read data from .tfrec and the source data.
 '''
 from preprocess import *
 from PIL import Image
@@ -13,6 +13,9 @@ BATCH_SIZE = 10
 
 
 def decode(serialized_example):
+    '''
+    to decode data from .tfrec files
+    '''
     features = tf.parse_single_example(
         serialized_example,
         features={
@@ -31,6 +34,9 @@ def decode(serialized_example):
 
 
 def get_iterator(for_training=True,num_epochs=1):
+    '''
+    to generate iterators for training, validation and test datasets
+    '''
     if not num_epochs:
         num_epochs = None
     root_dir = './'
@@ -56,6 +62,7 @@ def get_iterator(for_training=True,num_epochs=1):
 
 def try_equal(return_list,info_df):
     '''
+    this function is going to print the data's information out when there's difference compared with the source data.
     return_list: [arr_batch,label_batch,id_batch, X]
     '''
     npy_dir='./data_npy/mean_subtracted/'
@@ -112,6 +119,10 @@ def try_equal(return_list,info_df):
 
 
 def tf_varify():
+    '''
+    This session checks the difference between data read from .tfrec files and their corresponding source data.
+    for training, validation and test sets respectively
+    '''
     iterators = get_iterator(num_epochs=NUM_EPOCHS)
     handle = tf.placeholder(tf.string,shape=[])
     iterator = tf.data.Iterator.from_string_handle(handle, iterators[0].output_types)
