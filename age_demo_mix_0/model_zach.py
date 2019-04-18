@@ -145,10 +145,29 @@ def training_figure_iterator():
     
     
 
-def get_loss(predict_batches,label_batches):
-    with tf.name_scope('RMSE'):
-        loss = tf.reduce_mean(tf.square(predict_batches - label_batches)) 
-    return loss
+# def get_loss(predict_batches,label_batches):
+#     with tf.name_scope('RMSE'):
+#         loss = tf.reduce_mean(tf.square(predict_batches - label_batches)) 
+#     return loss
+
+def get_loss(predict_batches,label_batches,l2_loss):
+    '''
+    we are not sure the shape of predict_batches,label_batches, (?,1) or (?,),
+    so we reshape them into (?,) first.
+    '''
+    with tf.name_scope('cross_entropy'):
+        predict_batches = tf.reshape(predict_batches,[-1,1])
+        label_batches = tf.reshape(label_batches,[-1,1])
+        cost = tf.reduce_mean(tf.square(predict_batches - label_batches)) + FLAGS.l2_epsilon * l2_loss
+    return cost
+
+
+def person_corr(predicts,labels):
+    '''
+    we are not sure the shape of predicts,labels, (?,1) or (?,),
+    so we reshape them into (?,) first.
+    '''
+    return np.corrcoef(np.vstack((predicts.reshape(-1),labels.reshape(-1))))[0,1]
 
     
 def run_training():
@@ -176,9 +195,11 @@ def run_training():
     
         with tf.Session() as sess:
             losses = []
+            acces = []
             steps = []
             
             test_losses = []
+            test_acces = []
             test_steps = []
             
 #             pdb.set_trace()
@@ -195,16 +216,14 @@ def run_training():
                 step = 0
                 min_test_loss = FLAGS.MIN_TEST_LOSS
                 while True:
-                    start_time = time.time()
                     sess.run(train_op,
                               feed_dict={keep_prob:0.8,
                                         handle:train_iterator_handle})
 
-                    loss_value = sess.run(loss,
+                    loss_value,val_pred_age,val_chro_age = sess.run([loss,predicted_age,label_batch],
                                         feed_dict={keep_prob:1.0,
                                                   handle:val_iterator_handle})
-#                     print(type(loss_value))
-                    duration = time.time() - start_time
+                    acc_value = person_corr(val_pred_age,val_chro_age)
 
                     if step % 100 == 0:
                         sess.run(test_iterator.initializer)
@@ -223,11 +242,14 @@ def run_training():
                             test_predicted_ages = np.concatenate(tuple(test_predicted_ages))
                             test_labels = np.concatenate(tuple(test_labels))
                             test_loss = (get_loss(test_predicted_ages,test_labels)).eval()
+                            test_acc = person_corr(test_predicted_ages,test_labels)
                             test_losses.append(test_loss)
+                            test_acces.append(test_acc)
                             test_steps.append(step)
-                            print('Step %d: training_loss = %.2f (%.3f sec)\n (val_loss)test_loss = %.2f' 
-                                  %(step,loss_value,duration,test_loss))
-                            
+                            print('Step %d: (loss func: MSE, acc func: Pearson correlation coefficient)\n \
+                            training_loss = %.2f, training_acc = %.2f\n \
+                            val_loss(test_loss) = %.2f, val_acc(test_acc) = %.2f' 
+                                  %(step,loss_value,acc_value,test_loss,test_acc))
                             if test_loss < min_test_loss:
                                 min_test_loss = test_loss
                                 print('best shot model: test_loss = %.2f, step = %d' %(min_test_loss,step))
@@ -236,6 +258,7 @@ def run_training():
                                     print('model saved successfully.')
                                     
                     steps.append(step)
+                    acces.append(acc_value)
                     losses.append(loss_value)
                     step += 1
             except tf.errors.OutOfRangeError:

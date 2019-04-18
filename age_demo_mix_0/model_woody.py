@@ -4,6 +4,7 @@
 Using 3D-CNN model code of my own
 '''
 from preprocess import *
+from model_tools import *
 import argparse
 import sys
 
@@ -151,10 +152,6 @@ def get_loss(predict_batches,label_batches,l2_loss):
         cost = tf.reduce_mean(tf.square(predict_batches - label_batches)) + FLAGS.l2_epsilon * l2_loss
     return cost
 
-def get_accuracy(predicts,labels):
-#     with tf.name_scope('person'):
-#         person_acc = np.corrcoef(np.vstack((predicts,labels)))[0,1]
-    return tf.constant(0)
 
 def person_corr(predicts,labels):
     '''
@@ -230,6 +227,15 @@ def training_figure_iterator():
     
     
 def run_training():
+    '''
+    training set: training_data.tfrec
+    valadation set: test_data.tfrec
+    
+    there are three iterator handles:
+        train_iterator_handle: for training
+        val_iterator_handle: for calculation and drawing of the training set's mse and person correlation coefficient
+        test_iterator_handle: for validation
+    '''
     with tf.Graph().as_default():
         num_epochs = FLAGS.num_epochs
         iterators = get_iterator(num_epochs=num_epochs)
@@ -277,9 +283,9 @@ def run_training():
             
             try:
                 step = 0
-                min_test_loss = FLAGS.MIN_TEST_LOSS
+                min_val_mse = FLAGS.MIN_VAL_MSE
+                max_val_person = FLAGS.MAX_VAL_PERSON
                 while True:
-                    start_time = time.time()
                     sess.run(train_op, feed_dict={keep_prob:0.5,
                                                  is_training_forBN:True,
                                                 handle:train_iterator_handle})
@@ -288,7 +294,6 @@ def run_training():
                                                        is_training_forBN:False,
                                                       handle:val_iterator_handle})
                     acc_value = person_corr(val_pred_age,val_chro_age)
-                    duration = time.time() - start_time
                     if step % 100 == 0:
                         sess.run(test_iterator.initializer)
                         test_predicted_ages = []
@@ -312,15 +317,21 @@ def run_training():
                             test_acces.append(test_acc)
                             test_steps.append(step)
                             print('Step %d: (loss func: MSE, acc func: Pearson correlation coefficient)\n \
-                            training_loss = %.2f, training_acc = %.2f (%.3f sec)\n \
+                            training_loss = %.2f, training_acc = %.2f\n \
                             val_loss(test_loss) = %.2f, val_acc(test_acc) = %.2f' 
-                                  %(step,loss_value,acc_value,duration,test_loss,test_acc))
+                                  %(step,loss_value,acc_value,test_loss,test_acc))
                             
-                            if test_loss < min_test_loss:
-                                min_test_loss = test_loss
-                                print('best shot model: test_loss = %.2f, step = %d' %(min_test_loss,step))
+                            if test_loss < min_val_mse:
+                                min_val_mse = test_loss
+                                print('best mse model: mse of validation set = %.2f, step = %d' %(min_val_mse,step))
                                 if step > 100:
-                                    save_path = saver.save(sess, FLAGS.saver_dir)
+                                    saver.save(sess, FLAGS.saver_dir_mse)
+                                    print('model saved successfully.')
+                            if test_acc > max_val_person:
+                                max_val_person = test_acc
+                                print('best person correlation model: person correlation coefficient of validation set = %.2f, step = %d' %(max_val_person,step))
+                                if step > 100:
+                                    save_path = saver.save(sess, FLAGS.saver_dir_person)
                                     print('model saved successfully.')
                                     
                     steps.append(step)
@@ -330,30 +341,43 @@ def run_training():
             except tf.errors.OutOfRangeError:
                 print('Done training for %d epochs, %d steps.' %(num_epochs,step))
             
+            draw_training_proc(steps,losses,acces,
+                       test_steps,test_losses,test_acces,'woody')
 
-            f, (ax1, ax2) = plt.subplots(1, 2, figsize=(15,5))
-            ax1.plot(steps, losses)
-            ax1.plot(test_steps,test_losses)
-            ax1.set_title('trainning loss')
-            ax2.plot(steps, acces)
-            ax2.plot(test_steps,test_acces)
-            ax2.set_title('trainning acc')
-            ax1.grid(True)
-            ax2.grid(True)
-            plt.savefig('./img/training_proc_woody.pdf', bbox_inches='tight')
-            plt.savefig('./img/training_proc_woody.png', bbox_inches='tight')
+#             f, (ax1, ax2) = plt.subplots(1, 2, figsize=(15,5))
+#             ax1.plot(steps, losses)
+#             ax1.plot(test_steps,test_losses)
+#             ax1.set_title('trainning loss')
+#             ax2.plot(steps, acces)
+#             ax2.plot(test_steps,test_acces)
+#             ax2.set_title('trainning acc')
+#             ax1.grid(True)
+#             ax2.grid(True)
+#             plt.savefig('./img/training_proc_woody.pdf', bbox_inches='tight')
+#             plt.savefig('./img/training_proc_woody.png', bbox_inches='tight')
             
-            plt_data_path_name = './img/training_proc_woody_pltdata_' + time_now()
-            if not os.path.exists(plt_data_path_name + '.npy'):
-                np.save(plt_data_path_name, np.array([steps,losses,test_steps,test_losses]))
-            else:
-                print(plt_data_path_name + '.npy exists already.')
+#             plt_data_path_name = './img/training_proc_mse_woody_pltdata_' + time_now()
+#             if not os.path.exists(plt_data_path_name + '.npy'):
+#                 np.save(plt_data_path_name, np.array([steps,losses,test_steps,test_losses]))
+#             else:
+#                 print(plt_data_path_name + '.npy exists already.')
+            
+#             plt_data_path_name = './img/training_proc_person_woody_pltdata_' + time_now()
+#             if not os.path.exists(plt_data_path_name + '.npy'):
+#                 np.save(plt_data_path_name, np.array([steps,acces,test_steps,test_acces]))
+#             else:
+#                 print(plt_data_path_name + '.npy exists already.')
+
             
     return
  
     
 
-def test_sess(input_iterator):
+def test_sess(input_iterator,model_path):
+    '''
+    main part of test process
+    model_path: str; directry of the saved model which to be loaded, the best mse or the best person.
+    '''
     handle = tf.placeholder(tf.string,shape=[])
     iterator = tf.data.Iterator.from_string_handle(handle, input_iterator.output_types)
     arr_batch,label_batch,id_batch = iterator.get_next()
@@ -369,7 +393,7 @@ def test_sess(input_iterator):
     saver = tf.train.Saver()
 #         pdb.set_trace()
     with tf.Session() as sess:
-        saver.restore(sess, FLAGS.saver_dir)
+        saver.restore(sess, model_path)
         print('Model loaded successfully.')
         test_iterator_handle = sess.run(input_iterator.string_handle())
         sess.run(input_iterator.initializer)
@@ -409,18 +433,28 @@ def person_corr_draw(pred_age,chro_age,mse,person_corr,title='Test Data',save_fi
     plt.savefig('./img/'+save_filename+'.png', bbox_inches='tight')
     plt.show()
 
-def training_draw():
+def test_training_set(model_path):
+    '''
+    test process, training set as input
+    model_path: str; directry of the saved model which to be loaded, the best mse or the best person.
+    '''
     with tf.Graph().as_default():
         iterator = training_figure_iterator()[0]
-        test_loss, test_acc, pred_age, chro_age= test_sess(iterator)
-        person_corr_draw(pred_age,chro_age,test_loss,test_acc,title='Training Data',save_filename='training_corr_woody.pdf')
+        test_loss, test_acc, pred_age, chro_age= test_sess(iterator,model_path)
+        person_corr_draw(pred_age,chro_age,test_loss,test_acc,title='Training Data',
+                         save_filename='training_corr_'+model_path.split('_')[1]+'_woody.pdf')
     return
 
-def test_draw():
+def test_test_set(model_path):
+    '''
+    test process, test set as input
+    model_path: str; directry of the saved model which to be loaded, the best mse or the best person.
+    '''
     with tf.Graph().as_default():
         iterator = get_iterator(for_training=False)[0]
-        test_loss, test_acc, pred_age, chro_age= test_sess(iterator)
-        person_corr_draw(pred_age,chro_age,test_loss,test_acc,title='Test Data',save_filename='test_corr_woody.pdf')
+        test_loss, test_acc, pred_age, chro_age= test_sess(iterator,model_path)
+        person_corr_draw(pred_age,chro_age,test_loss,test_acc,title='Test Data',
+                         save_filename='test_corr_'+model_path.split('_')[1]+'_woody.pdf')
     return
 
 
@@ -466,14 +500,20 @@ def main(_):
     
     if not FLAGS.for_test:
         run_training()
-    training_draw()
-    test_draw()
+    test_training_set(FLAGS.saver_dir_mse)
+    test_training_set(FLAGS.saver_dir_person)
+    test_test_set(FLAGS.saver_dir_mse)
+    test_test_set(FLAGS.saver_dir_person)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--saver_dir',
+    parser.add_argument('--saver_dir_mse',
                        type=str,
-                       default="./log/model_woody.ckpt",
+                       default="./log/model_mse_woody.ckpt",
+                       help='Directory to save checkpoint.')
+    parser.add_argument('--saver_dir_person',
+                       type=str,
+                       default="./log/model_person_woody.ckpt",
                        help='Directory to save checkpoint.')
     parser.add_argument('--l2_epsilon',
                        type=float,
@@ -495,10 +535,15 @@ if __name__ == '__main__':
                         type=int,
                         default=100,
                         help='Number of epochs to run trainer.')
-    parser.add_argument('--MIN_TEST_LOSS',
+    parser.add_argument('--MIN_VAL_MSE',
                        type=float,
-                       default=500.0,
-                       help='The minimum test loss value under which the model would be saved.')
+                       default=300.0,
+                       help='For validation set, the minimum loss value less than which the model would be saved.')
+    parser.add_argument('--MAX_VAL_PERSON',
+                       type=float,
+                       default=0.5,
+                       help='For validation set, the maximum accuracy value (person correlation)\
+                        greater than which the model would be saved.')
     parser.add_argument('--for_test',
                        type=bool,
                        default=False,
