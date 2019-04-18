@@ -2,9 +2,6 @@
 This .py provides the process of check the compliance between the read data from .tfrec and the source data.
 '''
 from preprocess import *
-from PIL import Image
-import time
-import sys
 
 NUM_EPOCHS = 10
 SHAPE = np.load('./data_npy/mean_npy.npy').shape
@@ -26,6 +23,9 @@ def decode(serialized_example):
     )
     arr = tf.decode_raw(features['arr_raw'],tf.int64)
     arr = tf.reshape(arr,list(SHAPE))
+    arr = tf.cast(arr,tf.float32) # to be compliance with the restriction of TypeError: 
+                                  # Value passed to parameter 'input' has DataType int64 not in list of allowed values: 
+                                  # float16, bfloat16, float32, float64
     label = features['label']
     sub_id = features['id']
     
@@ -67,6 +67,7 @@ def try_equal(return_list,info_df):
     '''
     npy_dir='./data_npy/mean_subtracted/'
     decode_arr = return_list[0]
+    decode_arr = decode_arr.astype(np.int64)
 
     decode_label = return_list[1]
     decode_label = np.round(decode_label,2)

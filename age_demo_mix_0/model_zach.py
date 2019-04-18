@@ -7,12 +7,6 @@ Using ruyi's model code
 '''
 
 from preprocess import *
-from my_tools import *
-import tensorflow as tf
-from PIL import Image
-import matplotlib.pyplot as plt
-import numpy as np
-import time
 import argparse
 import sys
 
@@ -111,11 +105,13 @@ def decode(serialized_example):
     )
     arr = tf.decode_raw(features['arr_raw'],tf.int64)
     arr = tf.reshape(arr,list(FLAGS.arr_shape))
+    arr = tf.cast(arr,tf.float32) # to be compliance with the restriction of TypeError: 
+                                  # Value passed to parameter 'input' has DataType int64 not in list of allowed values: 
+                                  # float16, bfloat16, float32, float64
     label = features['label']
     sub_id = features['id']
     
     return arr,label,sub_id
-
 
 
 def get_iterator(for_training=True,num_epochs=1):
@@ -140,6 +136,14 @@ def get_iterator(for_training=True,num_epochs=1):
 
         
     return iterators
+
+def training_figure_iterator():
+    dataset = tf.data.TFRecordDataset('./training_data.tfrec')
+    dataset = dataset.map(decode)
+    dataset = dataset.batch(FLAGS.batch_size)
+    return [dataset.make_initializable_iterator()]
+    
+    
 
 def get_loss(predict_batches,label_batches):
     with tf.name_scope('RMSE'):
@@ -242,10 +246,10 @@ def run_training():
             ax1.plot(test_steps,test_losses)
             ax1.set_title('trainning loss')
             ax1.grid(True)
-            plt.savefig('./img/demo_1_2_training.pdf', bbox_inches='tight')
-            plt.savefig('./img/demo_1_2_training.png', bbox_inches='tight')
+            plt.savefig('./img/training_proc_zach.pdf', bbox_inches='tight')
+            plt.savefig('./img/training_proc_zach.png', bbox_inches='tight')
             
-            plt_data_path_name = './img/demo_1_2_pltdata_' + time_now()
+            plt_data_path_name = './img/training_proc_zach_pltdata_' + time_now()
             if not os.path.exists(plt_data_path_name + '.npy'):
                 np.save(plt_data_path_name, np.array([steps,losses,test_steps,test_losses]))
             else:
@@ -298,10 +302,62 @@ def run_test():
             for i in range(len(test_labels)):
                 plt.scatter(test_labels[i], test_predicted_ages[i], c = 'blue',s=1)
             plt.gca().set_aspect('equal', adjustable='box')
-            plt.savefig('./img/demo_1_2_test.pdf', bbox_inches='tight')
-            plt.savefig('./img/demo_1_2_test.png', bbox_inches='tight')
+            plt.savefig('./img/test_corr_zach.pdf', bbox_inches='tight')
+            plt.savefig('./img/test_corr_zach.png', bbox_inches='tight')
             plt.show()
     return
+
+
+def training_draw():
+    with tf.Graph().as_default():
+        handle = tf.placeholder(tf.string,shape=[])
+        test_iterator = training_figure_iterator()[0]
+        iterator = tf.data.Iterator.from_string_handle(handle, test_iterator.output_types)
+        arr_batch,label_batch,id_batch = iterator.get_next()
+        X = tf.reshape(arr_batch, [-1]+list(FLAGS.arr_shape)+[1])
+        keep_prob = tf.placeholder(tf.float32, name='keep_prob')
+        
+        prediction = convolutional_neural_network(X,keep_prob)
+        loss = get_loss(prediction,label_batch)
+    
+        saver = tf.train.Saver()
+#         pdb.set_trace()
+        with tf.Session() as sess:
+            saver.restore(sess, FLAGS.saver_dir)
+            print('Model loaded successfully.')
+            test_iterator_handle = sess.run(test_iterator.string_handle())
+            sess.run(test_iterator.initializer)
+            test_predicted_ages = []
+            test_labels = []
+            try:
+                while True:
+                    test_predicted_age,test_label = sess.run([prediction, label_batch],
+                                                    feed_dict={keep_prob:1.0,
+                                                              handle:test_iterator_handle})
+                    test_predicted_ages.append(test_predicted_age)
+                    test_labels.append(test_label)
+            except tf.errors.OutOfRangeError:
+                test_predicted_ages = np.concatenate(tuple(test_predicted_ages))
+                test_labels = np.concatenate(tuple(test_labels))
+                
+                test_loss = (get_loss(test_predicted_ages,test_labels)).eval()
+                
+                print('test_loss(RMSE) = %.2f.' 
+                                  %(test_loss))
+            fig = plt.figure()
+            plt.title('Test Data')
+            plt.xlabel('Chronological Age')
+            plt.ylabel('Brain Age (Predicted)')
+            plt.xlim(0, 100)
+            plt.ylim(0, 100)
+            for i in range(len(test_labels)):
+                plt.scatter(test_labels[i], test_predicted_ages[i], c = 'blue',s=1)
+            plt.gca().set_aspect('equal', adjustable='box')
+            plt.savefig('./img/training_corr_zach.pdf', bbox_inches='tight')
+            plt.savefig('./img/training_corr_zach.png', bbox_inches='tight')
+            plt.show()
+    return
+
 
 
 def main(_):
@@ -312,13 +368,14 @@ def main(_):
     if not FLAGS.for_test:
         run_training()
     run_test()
+    training_draw()
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--saver_dir',
                        type=str,
-                       default="./log/demo1.2_ruyi_model.ckpt",
+                       default="./log/model_zach.ckpt",
                        help='Directory to save checkpoint.')
     parser.add_argument('--l2_epsilon',
                        type=float,
@@ -336,11 +393,6 @@ if __name__ == '__main__':
                         type=int,
                         default=10,
                         help='Batch size.')
-#     parser.add_argument(
-#       '--learning_rate',
-#       type=float,
-#       default=0.01,
-#       help='Initial learning rate.')
     parser.add_argument('--num_epochs',
                         type=int,
                         default=100,
@@ -353,21 +405,6 @@ if __name__ == '__main__':
                        type=bool,
                        default=False,
                        help='If it is True, the program only runs the test part.')
-#     parser.add_argument(
-#       '--hidden1',
-#       type=int,
-#       default=128,
-#       help='Number of units in hidden layer 1.')
-#     parser.add_argument(
-#       '--hidden2',
-#       type=int,
-#       default=32,
-#       help='Number of units in hidden layer 2.')
 
-#     parser.add_argument(
-#       '--train_dir',
-#       type=str,
-#       default='/tmp/data',
-#       help='Directory with the training data.')
     FLAGS, unparsed = parser.parse_known_args()
     tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
