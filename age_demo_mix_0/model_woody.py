@@ -155,6 +155,7 @@ def get_loss(predict_batches,label_batches,l2_loss):
 
 def person_corr(predicts,labels):
     '''
+    (get_acc())
     we are not sure the shape of predicts,labels, (?,1) or (?,),
     so we reshape them into (?,) first.
     '''
@@ -175,6 +176,9 @@ def trainning(loss):
 
 
 def decode(serialized_example):
+    '''
+    serialized_example: tf.data.TFRecordDataset
+    '''
     features = tf.parse_single_example(
         serialized_example,
         features={
@@ -236,6 +240,7 @@ def run_training():
         val_iterator_handle: for calculation and drawing of the training set's mse and person correlation coefficient
         test_iterator_handle: for validation
     '''
+    return_list = []
     with tf.Graph().as_default():
         num_epochs = FLAGS.num_epochs
         iterators = get_iterator(num_epochs=num_epochs)
@@ -280,6 +285,7 @@ def run_training():
             test_iterator_handle = sess.run(test_iterator.string_handle())
             
             print('Let\'s get started to train!')
+            start_time = time.time()
             
             try:
                 step = 0
@@ -326,13 +332,13 @@ def run_training():
                                 print('best mse model: mse of validation set = %.2f, step = %d' %(min_val_mse,step))
                                 if step > 100:
                                     saver.save(sess, FLAGS.saver_dir_mse)
-                                    print('model saved successfully.')
+                                    print('best mse model saved successfully.')
                             if test_acc > max_val_person:
                                 max_val_person = test_acc
                                 print('best person correlation model: person correlation coefficient of validation set = %.2f, step = %d' %(max_val_person,step))
                                 if step > 100:
                                     save_path = saver.save(sess, FLAGS.saver_dir_person)
-                                    print('model saved successfully.')
+                                    print('best person correlation model saved successfully.')
                                     
                     steps.append(step)
                     acces.append(acc_value)
@@ -340,38 +346,20 @@ def run_training():
                     step += 1
             except tf.errors.OutOfRangeError:
                 print('Done training for %d epochs, %d steps.' %(num_epochs,step))
-            
-            draw_training_proc(steps,losses,acces,
-                       test_steps,test_losses,test_acces,'woody')
+                end_time = time.time()
+                print('time elapsed: '+sec2hms(end_time-start_time))
+                return_list = [steps,losses,acces,test_steps,test_losses,test_acces]
+                return_list_path_name = './img/training_return_list_woody'
+                if os.path.exists(return_list_path_name + '.npy'):
+                    print(return_list_path_name + '.npy exists already. Cover it...')
+                np.save(return_list_path_name, np.array(return_list))
 
-#             f, (ax1, ax2) = plt.subplots(1, 2, figsize=(15,5))
-#             ax1.plot(steps, losses)
-#             ax1.plot(test_steps,test_losses)
-#             ax1.set_title('trainning loss')
-#             ax2.plot(steps, acces)
-#             ax2.plot(test_steps,test_acces)
-#             ax2.set_title('trainning acc')
-#             ax1.grid(True)
-#             ax2.grid(True)
-#             plt.savefig('./img/training_proc_woody.pdf', bbox_inches='tight')
-#             plt.savefig('./img/training_proc_woody.png', bbox_inches='tight')
-            
-#             plt_data_path_name = './img/training_proc_mse_woody_pltdata_' + time_now()
-#             if not os.path.exists(plt_data_path_name + '.npy'):
-#                 np.save(plt_data_path_name, np.array([steps,losses,test_steps,test_losses]))
-#             else:
-#                 print(plt_data_path_name + '.npy exists already.')
-            
-#             plt_data_path_name = './img/training_proc_person_woody_pltdata_' + time_now()
-#             if not os.path.exists(plt_data_path_name + '.npy'):
-#                 np.save(plt_data_path_name, np.array([steps,acces,test_steps,test_acces]))
-#             else:
-#                 print(plt_data_path_name + '.npy exists already.')
+    if len(return_list) == 0:
+        print('Something wrong with training process...')
+        return -1
+    else:
+        return 0 
 
-            
-    return
- 
-    
 
 def test_sess(input_iterator,model_path):
     '''
@@ -418,20 +406,7 @@ def test_sess(input_iterator,model_path):
                               %(test_loss,test_acc))
     return test_loss,test_acc,test_predicted_ages,test_labels
 
-def person_corr_draw(pred_age,chro_age,mse,person_corr,title='Test Data',save_filename='person_corr'):
-    fig = plt.figure()
-    plt.title(title)
-    plt.xlabel('Chronological Age')
-    plt.ylabel('Brain Age (Predicted)')
-    plt.xlim(0, 100)
-    plt.ylim(0, 100)
-    plt.text(10, 85, 'RMSE = %.2f\nPerson = %.2f' %(np.sqrt(mse),person_corr),
-                bbox={'facecolor':'red', 'alpha':0.5, 'pad':10})
-    plt.scatter(chro_age.reshape(-1), pred_age.reshape(-1), c = 'blue',s=1)
-    plt.gca().set_aspect('equal', adjustable='box')
-    plt.savefig('./img/'+save_filename+'.pdf', bbox_inches='tight')
-    plt.savefig('./img/'+save_filename+'.png', bbox_inches='tight')
-    plt.show()
+
 
 def test_training_set(model_path):
     '''
@@ -441,7 +416,7 @@ def test_training_set(model_path):
     with tf.Graph().as_default():
         iterator = training_figure_iterator()[0]
         test_loss, test_acc, pred_age, chro_age= test_sess(iterator,model_path)
-        person_corr_draw(pred_age,chro_age,test_loss,test_acc,title='Training Data',
+        draw_person_corr(pred_age,chro_age,test_loss,test_acc,title='Training Data',
                          save_filename='training_corr_'+model_path.split('_')[1]+'_woody.pdf')
     return
 
@@ -453,45 +428,12 @@ def test_test_set(model_path):
     with tf.Graph().as_default():
         iterator = get_iterator(for_training=False)[0]
         test_loss, test_acc, pred_age, chro_age= test_sess(iterator,model_path)
-        person_corr_draw(pred_age,chro_age,test_loss,test_acc,title='Test Data',
+        draw_person_corr(pred_age,chro_age,test_loss,test_acc,title='Test Data',
                          save_filename='test_corr_'+model_path.split('_')[1]+'_woody.pdf')
     return
 
 
 
-def test_single_subject(phe_index):
-    '''
-    '''
-    with tf.Graph().as_default():
-        phe = pd.read_csv('./phenotypics.csv', sep=',',header=0)
-        sub_id = phe['id'][phe_index]
-        arr = np.load('./data_npy/mean_subtracted/'+str(int(sub_id))+'.npy')
-        arr = arr.astype(np.float32)
-        arr_shape = arr.shape
-        label = phe['age'][phe_index]
-        
-        tf_arr = tf.placeholder(tf.float32,shape=arr_shape)
-        tf_label = tf.placeholder(tf.float32)
-        X = tf.reshape(arr, [-1]+list(arr_shape)+[1])
-        keep_prob = tf.placeholder(tf.float32, name='keep_prob')
-        
-        is_training_forBN = tf.placeholder(tf.bool, name='is_training_forBN')
-        
-        predicted_age,l2_loss = inference(X,keep_prob,is_training_forBN,trivial=False)
-
-        saver = tf.train.Saver()
-        
-        with tf.Session() as sess:
-            saver.restore(sess, './log/model_woody.ckpt')
-            print('Model loaded successfully.')
-                
-            p_age = sess.run(predicted_age,feed_dict={keep_prob:1.0,
-                                              is_training_forBN:False,
-                                              tf_arr:arr,
-                                              tf_label:label})
-            print('Subject: ',sub_id,', chronological age is ',
-                  label,', predicted age is ',p_age,'.')
-    return
 
 def main(_):
 #     pdb.set_trace()
@@ -537,11 +479,11 @@ if __name__ == '__main__':
                         help='Number of epochs to run trainer.')
     parser.add_argument('--MIN_VAL_MSE',
                        type=float,
-                       default=300.0,
+                       default=100.0,
                        help='For validation set, the minimum loss value less than which the model would be saved.')
     parser.add_argument('--MAX_VAL_PERSON',
                        type=float,
-                       default=0.5,
+                       default=0.6,
                        help='For validation set, the maximum accuracy value (person correlation)\
                         greater than which the model would be saved.')
     parser.add_argument('--for_test',
