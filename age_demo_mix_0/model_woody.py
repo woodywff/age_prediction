@@ -241,6 +241,9 @@ def run_training():
         test_iterator_handle: for validation
     '''
     return_list = []
+    MSE_SAVED = False
+    PERSON_SAVED = False
+    
     with tf.Graph().as_default():
         num_epochs = FLAGS.num_epochs
         iterators = get_iterator(num_epochs=num_epochs)
@@ -306,11 +309,13 @@ def run_training():
                         test_labels = []
                         try:
                             while True:
-                                test_predicted_age,test_label = sess.run([predicted_age,label_batch],
+                                test_predicted_age,test_label,test_id = sess.run([predicted_age,label_batch,id_batch],
                                                                 feed_dict={keep_prob:1.0,
                                                                            is_training_forBN:False,
                                                                           handle:test_iterator_handle})
 #                                 pdb.set_trace()
+#                                 print("\033[0;30;40m\tTRY:\033[0m")
+#                                 print(test_id)
                                 test_predicted_ages.append(test_predicted_age)
                                 test_labels.append(test_label)
                         except tf.errors.OutOfRangeError:
@@ -333,12 +338,14 @@ def run_training():
                                 if step > 100:
                                     saver.save(sess, FLAGS.saver_dir_mse)
                                     print('best mse model saved successfully.')
+                                    MSE_SAVED = True
                             if test_acc > max_val_person:
                                 max_val_person = test_acc
                                 print('best person correlation model: person correlation coefficient of validation set = %.2f, step = %d' %(max_val_person,step))
                                 if step > 100:
                                     save_path = saver.save(sess, FLAGS.saver_dir_person)
                                     print('best person correlation model saved successfully.')
+                                    PERSON_SAVED = True
                                     
                     steps.append(step)
                     acces.append(acc_value)
@@ -353,6 +360,13 @@ def run_training():
                 if os.path.exists(return_list_path_name + '.npy'):
                     print(return_list_path_name + '.npy exists already. Cover it...')
                 np.save(return_list_path_name, np.array(return_list))
+                
+                if not MSE_SAVED:
+                    saver.save(sess, FLAGS.saver_dir_mse)
+                    print('Save the last model as the best mse model.')
+                if not PERSON_SAVED:
+                    saver.save(sess, FLAGS.saver_dir_person)
+                    print('Save the last model as the best person correlation model.')
 
     if len(return_list) == 0:
         print('Something wrong with training process...')
@@ -365,6 +379,7 @@ def test_sess(input_iterator,model_path):
     '''
     main part of test process
     model_path: str; directry of the saved model which to be loaded, the best mse or the best person.
+    
     '''
     handle = tf.placeholder(tf.string,shape=[])
     iterator = tf.data.Iterator.from_string_handle(handle, input_iterator.output_types)
@@ -389,10 +404,13 @@ def test_sess(input_iterator,model_path):
         test_labels = []
         try:
             while True:
-                test_predicted_age,test_label = sess.run([predicted_age, label_batch],
+                test_predicted_age,test_label,test_id = sess.run([predicted_age, label_batch,id_batch],
                                                 feed_dict={keep_prob:1.0,
                                                            is_training_forBN:False,
                                                           handle:test_iterator_handle})
+#                 pdb.set_trace()
+#                 print("\033[0;30;40m\tTRY:\033[0m")
+#                 print(test_id)
                 test_predicted_ages.append(test_predicted_age)
                 test_labels.append(test_label)
         except tf.errors.OutOfRangeError:
