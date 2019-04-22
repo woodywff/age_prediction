@@ -335,14 +335,14 @@ def run_training():
                             if test_loss < min_val_mse:
                                 min_val_mse = test_loss
                                 print('best mse model: mse of validation set = %.2f, step = %d' %(min_val_mse,step))
-                                if step > 100:
+                                if step > FLAGS.MIN_SAVED_STEP:
                                     saver.save(sess, FLAGS.saver_dir_mse)
                                     print('best mse model saved successfully.')
                                     MSE_SAVED = True
                             if test_acc > max_val_person:
                                 max_val_person = test_acc
                                 print('best person correlation model: person correlation coefficient of validation set = %.2f, step = %d' %(max_val_person,step))
-                                if step > 100:
+                                if step > FLAGS.MIN_SAVED_STEP:
                                     save_path = saver.save(sess, FLAGS.saver_dir_person)
                                     print('best person correlation model saved successfully.')
                                     PERSON_SAVED = True
@@ -504,6 +504,10 @@ if __name__ == '__main__':
                        default=0.6,
                        help='For validation set, the maximum accuracy value (person correlation)\
                         greater than which the model would be saved.')
+    parser.add_argument('--MIN_SAVED_STEP',
+                       type=int,
+                       default=2000,
+                       help='After which step the model is possible to be saved.')
     parser.add_argument('--for_test',
                        type=bool,
                        default=False,
