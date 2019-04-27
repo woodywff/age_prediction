@@ -2,21 +2,10 @@
 
 
 '''
-
-import xlrd
-import numpy as np
-import pandas as pd
-import os
-import re
-from progressbar import *
-import nibabel as nib
-import pdb
-import scipy.ndimage
-import matplotlib.pyplot as plt
-import tensorflow as tf
-from my_tools import *
-import tarfile
-import shutil
+import sys
+sys.path.append("..")
+from dev_tools.my_tools import *
+from dev_tools.preprocess_tools import *
 
 # DESIRED_SHAPE=(130, 130, 110)
 # DESIRED_SHAPE=(130, 130, 130)
@@ -123,84 +112,7 @@ def gen_training_test_csv():
     print('test.csv created.')
     return        
 
-def resample(image, pixdim, new_spacing=[1,1,1]):
-    '''
-    (This func is copied from Zach's code)
-    All images are resampled according to the pixel dimension information read from the 
-    image header files. 
-    This ensures that all images will have the same resolution.
-    
-    image: ndarray nii_img.get_data()
-    pixdim: nii_img.header['pixdim'][1:4]
-    
-    return: ndarray
-    '''
-    spacing = pixdim
 
-    resize_factor = spacing / new_spacing
-    new_real_shape = image.shape * resize_factor
-    new_shape = np.round(new_real_shape)
-    real_resize_factor = new_shape / image.shape
-#     new_spacing = spacing / real_resize_factor
-    image = scipy.ndimage.interpolation.zoom(image, real_resize_factor, mode='nearest')
-    
-    return image
-#-----------------------------old version-----------------------------
-def crop_pad(image,desired_shape):
-    '''
-    To crop or pad images to the same shape
-    this function may cause problem when cropping.
-    
-    image: ndarray
-    desired_shape: (130,130,110) like tuple
-    
-    return: ndarray
-    '''
-    X_margin_0 = int((desired_shape[0]-image.shape[0])/2)
-    Y_margin_0 = int((desired_shape[1]-image.shape[1])/2)
-    Z_margin_0 = int((desired_shape[2]-image.shape[2])/2)
-    
-    X_margin_1 = desired_shape[0]-image.shape[0]-X_margin_0
-    Y_margin_1 = desired_shape[1]-image.shape[1]-Y_margin_0
-    Z_margin_1 = desired_shape[2]-image.shape[2]-Z_margin_0
-    
-    npad = ((X_margin_0,X_margin_1), 
-            (Y_margin_0,Y_margin_1), 
-            (Z_margin_0,Z_margin_1))
-    crop_padded_img = np.pad(image, pad_width=npad, mode='constant', constant_values=0)
-    return crop_padded_img
-#-----------------------------End of old version-----------------------------
-
-#------------------------------------crop and pad for ABIDE-----------------------------
-def crop_center(img,cropx,cropy, cropz):
-    x,y,z = img.shape
-    startx = x//2-(cropx//2)
-    starty = y//2-(cropy//2)
-    startz = z//2-(cropz//2)
-    return img[startx:startx+cropx,starty:starty+cropy, startz:startz+cropz]
-
-def crop_pad_abide(image,desired_shape):
-    cropx = image.shape[0]
-    cropy = image.shape[1]
-    cropz = image.shape[2]
-    if desired_shape[0] < image.shape[0]:
-        cropx = desired_shape[0]
-    if desired_shape[1] < image.shape[1]:
-        cropy = desired_shape[1]
-    if desired_shape[2] < image.shape[2]:
-        cropz = desired_shape[2]
-
-    cropped_img = crop_center(image, cropx, cropy, cropz)
-
-    X_before = int((desired_shape[0]-cropped_img.shape[0])/2)
-    Y_before = int((desired_shape[1]-cropped_img.shape[1])/2)
-    Z_before = int((desired_shape[2]-cropped_img.shape[2])/2)
-
-    npad = ((X_before, desired_shape[0]-cropped_img.shape[0]-X_before), 
-            (Y_before, desired_shape[1]-cropped_img.shape[1]-Y_before), 
-            (Z_before, desired_shape[2]-cropped_img.shape[2]-Z_before))
-    crop_padded_img = np.pad(cropped_img, pad_width=npad, mode='constant', constant_values=0)
-    return crop_padded_img
 #------------------------------------End of crop and pad for ABIDE-----------------------------
 
 
@@ -222,6 +134,7 @@ def preprocess_1(source_dir,target_dir_origin):
             target_filename = os.path.join(target_dir_origin,filename.split('.')[0])
             if not os.path.exists(target_filename + '.npy'):
                 cropped_npy = inner_preprocess_1(os.path.join(source_dir,filename))
+                cropped_npy = minmax_normalize(cropped_npy)
                 np.save(target_filename,cropped_npy)
         pbar.update(int(i*100/(n_bar-1)))
     pbar.finish()
@@ -264,6 +177,7 @@ def preprocess_2(target_dir_origin,target_dir_mean):
     '''
     # get the mean values of all the training data first
     mean_npy = calc_mean()
+    std_npy = calc_std()
     
     npy_list = os.listdir(target_dir_origin)
     
@@ -280,52 +194,14 @@ def preprocess_2(target_dir_origin,target_dir_mean):
                 except FileNotFoundError:
                     print('No such file: ',npy_filename)
                     continue
-                subtracted_npy = origin_npy - mean_npy
+#                 subtracted_npy = origin_npy - mean_npy
+                subtracted_npy = (origin_npy - mean_npy)/std_npy
                 np.save(os.path.join(target_dir_mean,filename.split('.')[0]),subtracted_npy)
         pbar.update(int(i*100/(n_bar-1)))
     pbar.finish()
     
     return
 
-def calc_mean():
-    '''
-    This code is self-content, which means it sucks and could be polished.
-    '''
-    if os.path.exists('./data_npy/mean_npy.npy'):
-        print('./data_npy/mean_npy.npy exists already.')
-        mean_npy = np.load('./data_npy/mean_npy.npy')
-        return mean_npy
-    
-    train_df = pd.read_csv('./training.csv', sep=',',header=0)
-    id_list = train_df['id']
-    
-
-#     pdb.set_trace()
-    count = 0
-    npy_list = []
-    for ixi_id in id_list:
-#         str_id = str(int(ixi_id))
-#         if ixi_id < 10:
-#             str_id = '00' + str_id
-#         elif ixi_id > 9 and ixi_id < 100:
-#             str_id = '0' + str_id
-        npy_filename = str(int(ixi_id)) + '.npy'
-
-        try:
-            origin_npy = np.load(os.path.join('./data_npy/origin/',npy_filename))
-        except FileNotFoundError:
-            print('No such file: ',npy_filename)
-            continue
-        npy_list.append(origin_npy)
-        count += 1
-    print('Number of training samples: ',count)
-    mean_npy = np.mean(npy_list,axis=0)
-    mean_npy = np.round(mean_npy)
-    mean_npy = mean_npy.astype(int)
-    np.save(os.path.join('./data_npy/','mean_npy'),mean_npy)
-    return mean_npy
-    
-    
     
 def gen_npy(source_dir,target_dir):
     '''
@@ -339,10 +215,7 @@ def gen_npy(source_dir,target_dir):
     dirs = [target_dir, target_dir_origin,target_dir_mean]
         
     for path in dirs:
-        try:
-            os.mkdir(path)
-        except FileExistsError:
-            print(path,' exists already!')
+        my_mkdir(path)
     
     # preprocess_1: step.1 step.2   
     preprocess_1(source_dir,target_dir_origin)
