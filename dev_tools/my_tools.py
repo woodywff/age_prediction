@@ -52,6 +52,31 @@ def print2d(npy_img,img_name='',save=False,save_name='./test.jpg'):
         plt.savefig(save_name)
     return
 
+def print2d_origin(npy_img,img_name='',save=False,save_name='./test.jpg'):
+    '''
+    !!!dataset specific
+    plot 2d mri images in Sagittal, Coronal and Axial dimension.
+    img: 3d ndarray
+    '''
+    dim = npy_img.shape
+#     print('Dimension: ',npy_img.shape)
+    f, (ax1, ax2,ax3) = plt.subplots(1, 3, figsize=(15,5))
+
+    img = npy_img[round(dim[0]/2),:,:]
+    ax1.imshow(img, cmap=plt.cm.gray)
+    print(img[0,0])
+    ax1.axis('off')
+    img = npy_img[:,round(dim[1]/2),:]
+    ax2.imshow(img, cmap=plt.cm.gray)
+    ax2.axis('off')
+    img = npy_img[:,:,round(dim[2]/2)]
+    ax3.imshow(img, cmap=plt.cm.gray)
+    ax3.axis('off')
+    
+    if save:
+        plt.savefig(save_name)
+    return
+
 def printimg(filename,size=10):
     f, (ax1) = plt.subplots(1, 1, figsize=(size,size))
     npy = plt.imread(filename)
