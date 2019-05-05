@@ -83,3 +83,6 @@ def calc_mae(predicts,labels):
     '''
     n = labels.shape[0]
     return np.sum(np.abs(predicts.reshape(-1)-labels.reshape(-1)))/n
+
+def calc_mse(predicts,labels):
+    return np.sqrt(np.sum(np.square(predicts.reshape(-1)-labels.reshape(-1))))/predicts.shape[0]

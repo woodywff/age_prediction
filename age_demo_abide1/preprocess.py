@@ -94,23 +94,7 @@ def gen_phenotypics():
 
 #-------------------------------- END once for a life thing (dataset specific) -------------------------------------------------------
 
-def gen_training_test_csv():
-    '''
-    This is an once for all thing.
-    to generate training.csv and test.csv
-    '''
-    if os.path.exists('./training.csv') and os.path.exists('./test.csv'):
-        print('training.csv and test.csv exist already.')
-        return
-    phenotypics = pd.read_csv('./phenotypics.csv', sep=',',header=0)
-    mid_point = round(0.9 * len(phenotypics))
-    training_df = phenotypics[:mid_point]
-    test_df = phenotypics[mid_point:]
-    training_df.to_csv(os.path.join('./','training.csv'), index=False, sep=',')
-    print('training.csv created.')
-    test_df.to_csv(os.path.join('./','test.csv'), index=False, sep=',')
-    print('test.csv created.')
-    return        
+  
 
 
 #------------------------------------End of crop and pad for ABIDE-----------------------------
@@ -164,43 +148,7 @@ def inner_preprocess_1(nii_file):
     crop_padded_img = np.round(crop_padded_img)
     return crop_padded_img.astype(int)
 
-def preprocess_2(target_dir_origin,target_dir_mean):
-    '''
-    preprocess
-    step.3 subtract mean values
-    
-    The mean image of all the training data is computed and is subtracted from all training and test data.
-    It is worth noting that the test data does not contribute to the mean image. 
-    This is because the training data, and only training data, 
-    needs to have zero mean for better training performance.
-    
-    '''
-    # get the mean values of all the training data first
-    mean_npy = calc_mean()
-    std_npy = calc_std()
-    
-    npy_list = os.listdir(target_dir_origin)
-    
-    pbar = ProgressBar().start()
-    n_bar = len(npy_list)
-    
-    for i,filename in enumerate(npy_list):
-        re_result = re.match('^.*\.npy$',filename)
-        if re_result:
-            target_filename = os.path.join(target_dir_mean,filename)
-            if not os.path.exists(target_filename):
-                try:
-                    origin_npy = np.load(os.path.join(target_dir_origin,filename))
-                except FileNotFoundError:
-                    print('No such file: ',npy_filename)
-                    continue
-#                 subtracted_npy = origin_npy - mean_npy
-                subtracted_npy = (origin_npy - mean_npy)/std_npy
-                np.save(os.path.join(target_dir_mean,filename.split('.')[0]),subtracted_npy)
-        pbar.update(int(i*100/(n_bar-1)))
-    pbar.finish()
-    
-    return
+
 
     
 def gen_npy(source_dir,target_dir):
@@ -224,59 +172,6 @@ def gen_npy(source_dir,target_dir):
     return
 
 
-def gen_tfrecord(csv_path_name,npy_dir,tf_filename='tf.tfrecords'):
-    '''
-    To generate .tfrecord files according to .csv file
-    
-    csv_path_name: .csv file's path and name
-    npy_dir: where are the .npy files
-    tf_filename: name of .tfrecords file under ./
-    '''
-#     pdb.set_trace()
-    
-    tf_path_name = os.path.join('./',tf_filename)
-
-    if os.path.exists(tf_path_name):
-        print(tf_path_name, 'exists already.')
-        return
-    print('Writing', tf_path_name)
-    with tf.python_io.TFRecordWriter(tf_path_name) as writer:
-        info_df = pd.read_csv(csv_path_name, sep=',',header=0)
-        id_list = list(info_df['id'])
-        age_list = list(info_df['age'])
-        n = len(id_list)
-        pbar = ProgressBar().start()
-        for i,ixi_id in enumerate(id_list):
-#             str_id = str(int(ixi_id))
-#             if ixi_id < 10:
-#                 str_id = '00' + str_id
-#             elif ixi_id > 9 and ixi_id < 100:
-#                 str_id = '0' + str_id
-            npy_filename = str(int(ixi_id)) + '.npy'
-            npy_path_filename = os.path.join(npy_dir,npy_filename)
-            try:
-                arr_npy = np.load(npy_path_filename)
-            except FileNotFoundError:
-                print('No such file: ',npy_filename)
-                continue
-                
-#             pdb.set_trace()
-            label = round(age_list[i],2)
-#             arr = arr_npy.astype(np.float32)
-            arr_raw = arr_npy.tostring()
-            example = tf.train.Example(
-                features = tf.train.Features(
-                    feature = {
-                        'arr_raw': tf.train.Feature(bytes_list=tf.train.BytesList(value=[arr_raw])),
-                        'label': tf.train.Feature(float_list=tf.train.FloatList(value=[label])),
-                        'id': tf.train.Feature(int64_list=tf.train.Int64List(value=[int(ixi_id)])),
-                    }
-                )
-            )
-            writer.write(example.SerializeToString())
-            pbar.update(int(i*100/(n-1)))
-        pbar.finish()
-    return
 
 def preprocess_run():
     print_sep('preprocessing starts')

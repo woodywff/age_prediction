@@ -1,7 +1,10 @@
 '''
 This .py provides the process of check the compliance between the read data from .tfrec and the source data.
 '''
-from preprocess import *
+import sys
+sys.path.append("..")
+from dev_tools.my_tools import *
+from dev_tools.preprocess_tools import *
 
 NUM_EPOCHS = 10
 SHAPE = np.load('./data_npy/mean_npy.npy').shape

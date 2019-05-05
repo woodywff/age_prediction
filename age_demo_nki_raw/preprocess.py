@@ -1,73 +1,47 @@
 '''
-Replication of Ruyi's code.
-Dataset: IXI
+Dataset: NKI
 10% for test, 90% for training. (Option: k-folds cross validation, not implemented yet.)
 
-# after tar IXI dataset
-# rename files
-# get phenotypics.csv
-# get training.csv test.csv
-# get preprocessed .npy files. details of preprocess please refer to the functions.
 
 '''
+
 import sys
 sys.path.append("..")
 from dev_tools.my_tools import *
 from dev_tools.preprocess_tools import *
 
+# for preprocess_1 resampling
+# DESIRED_SHAPE_origin=(176,256,256)
+# DESIRED_SHAPE_resample=(110,130,130)
 DESIRED_SHAPE = (67,67,67)
 
-#-------------------- once for a life thing (dataset specific)-------------------------------
 
-def IXI_rename():
+def gen_phenotypics(xls_path_name):
     '''
+    *** This needs to be modified for different programs ***
     This is an once for all thing.
-    rename .nii.gz files as IXI[ixi_id].nii.gz
-    '''
-    STAMP = False # if any file has the right name for Regular Expression
-
-    target_dir = '/media/woody/Elements/age_data/IXI/IXI-T1'
-    files_list = os.listdir(target_dir)
+    To generate phenotypics.csv
     
-    pbar = ProgressBar().start()
-    n_bar = len(files_list)
-    
-    for i,filename in enumerate(files_list):
-        re_result = re.match('^IXI.*-.*-.*-T1\.nii\.gz$',filename)
-        if re_result:
-            STAMP = True
-            new_filename = filename.split('-')[0] + '.nii.gz'
-            os.rename(os.path.join(target_dir,filename),os.path.join(target_dir,new_filename))
-        pbar.update(int(i*100/(n_bar-1)))
-    pbar.finish()
-    
-    if not STAMP:
-        print('IXI_rename() finished. No file found.')
-    else:
-        print('IXI_rename() finished. Done.')
-    return
-
-def gen_phenotypics():
+    xls_path_name: excel file with phenotypic information.
     '''
-    This is an once for all thing.
-    to generate phenotypics.csv
-    '''
+#     pdb.set_trace()
     if os.path.exists('./phenotypics.csv'):
         print('phenotypics.csv exists already.')
         return
     # get id and age from .xls
-    phenotypic_table = xlrd.open_workbook('IXI.xls','rb')
+    phenotypic_table = xlrd.open_workbook(xls_path_name,'rb')
     pt = phenotypic_table.sheets()[0]
 
-    id_list = pt.col_values(0)[1:]
-    index_age = np.where(np.array(pt.row_values(0))=='AGE')[0][0]
-    age_list = pt.col_values(index_age)[1:]
+    id_list = pt.col_values(0)
+    age_list = pt.col_values(1)
 
     # delete empty items:
     for i in range(len(id_list)-1,0-1,-1):
         if age_list[i] == '':
             del id_list[i]
             del age_list[i]
+        else:
+            id_list[i] = int(id_list[i].split('A')[1])
 
     # shuffle and save the phenotypic info:
     id_list, age_list = get_shuffled(id_list,age_list)
@@ -76,9 +50,7 @@ def gen_phenotypics():
     print('phenotypics.csv created.')
     return
 
-#-------------------------------- END once for a life thing (dataset specific) -------------------------------------------------------
 
-    
 
 
 def preprocess_1(source_dir,target_dir_origin):
@@ -87,8 +59,6 @@ def preprocess_1(source_dir,target_dir_origin):
     step.1: resample
     step.2: crop and padd
     
-    source_dir = '/media/woody/Elements/age_data/IXI/IXI-T1'
-    target_dir_origin = './data_npy/origin'
     '''
     nii_list = os.listdir(source_dir)
      
@@ -96,9 +66,9 @@ def preprocess_1(source_dir,target_dir_origin):
     n_bar = len(nii_list)
     
     for i,filename in enumerate(nii_list):
-        re_result = re.match('^IXI[0-9]*\.nii\.gz$',filename)
+        re_result = re.match('^.*\.nii$',filename)
         if re_result:
-            target_filename = os.path.join(target_dir_origin,str(int(filename.split('IXI')[1].split('.')[0])))
+            target_filename = os.path.join(target_dir_origin,str(int(filename.split('A')[1].split('.')[0])))
             if not os.path.exists(target_filename + '.npy'):
                 cropped_npy = inner_preprocess_1(os.path.join(source_dir,filename))
                 cropped_npy = minmax_normalize(cropped_npy)
@@ -120,13 +90,10 @@ def inner_preprocess_1(nii_file):
     
     nii_img = nib.load(nii_file)
     header = nii_img.header
-    pixdim = header['pixdim'][1:4]
+    pixdim = np.round(header['pixdim'][1:4],4)
     npy_img = nii_img.get_data()
     resampled_img = resample(npy_img, pixdim)
-
-    rotated_img = rot_ixi2abide(resampled_img)  # rotate ixi img to the same direction as ABIDE img
-    
-    crop_padded_img = crop_pad(rotated_img,DESIRED_SHAPE)
+    crop_padded_img = crop_pad(resampled_img,DESIRED_SHAPE)
     crop_padded_img = np.round(crop_padded_img)
     return crop_padded_img.astype(int)
 
@@ -146,39 +113,36 @@ def gen_npy(source_dir,target_dir):
     for path in dirs:
         my_mkdir(path)
     
-    # preprocess_1: step.1 step.2   
+    # preprocess_1: .nii to .npy   
     preprocess_1(source_dir,target_dir_origin)
-    # preprocess_2: step.3
+    # preprocess_2: subtract mean values
     preprocess_2(target_dir_origin,target_dir_mean)
     return
 
 
 
-def preprocess_run():
+def preprocess_main():
     print_sep('preprocessing starts')
-    # after tar IXI dataset
-    # rename files
-    IXI_rename()
     # get phenotypics.csv
-    gen_phenotypics()
+    gen_phenotypics('/media/woody/Elements/Steve_age_data/participants.xlsx')
     # get training.csv test.csv
     gen_training_test_csv()
     # get preprocessed .npy files
-    # please refer to the comments of gen_npy()
-    source_dir = '/media/woody/Elements/age_data/IXI/IXI-T1'
+    source_dir = '/media/woody/Elements/Steve_age_data/ANAT'
     target_dir = './data_npy'
     gen_npy(source_dir,target_dir)
-    # # get .tfrecords ready
+    # get .tfrecords ready
     gen_tfrecord('./training.csv',npy_dir='./data_npy/mean_subtracted/',tf_filename='training_data.tfrec')
     gen_tfrecord('./test.csv',npy_dir='./data_npy/mean_subtracted/',tf_filename='test_data.tfrec')
-
+    
     my_mkdir('./img')
     my_mkdir('./log')
-    print_sep('preprocessing FINISHED')
+    print_sep('preprocessing ends')
     return
     
 
-# this is the entrance of this file
-if __name__ == '__main__':
-    preprocess_run()
 
+if __name__ == '__main__':
+    preprocess_main()
+    
+    

@@ -102,6 +102,15 @@ def rot_ixi2abide(img_ixi):
     temp = np.rot90(temp,axes=(1,0))
     return temp
 
+def rot_oasis2abide(img_ixi):
+    '''
+    to rot OASIS to the same direction as ABIDE
+    '''
+    temp = np.rot90(img_ixi,axes=(1,2))
+    temp = np.rot90(temp,axes=(0,1))
+    return temp
+
+
 def time_now():
     return time.strftime('%Y.%m.%d.%H:%M:%S',time.localtime(time.time()))
 
