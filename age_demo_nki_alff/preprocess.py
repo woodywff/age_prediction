@@ -6,7 +6,7 @@ Dataset: NKI
 '''
 
 import sys
-sys.path.append("../..")
+sys.path.append("..")
 from dev_tools.my_tools import *
 from dev_tools.preprocess_tools import *
 
@@ -66,17 +66,21 @@ def preprocess_1(source_dir,target_dir_origin):
     n_bar = len(nii_list)
     
     for i,filename in enumerate(nii_list):
-        re_result = re.match('^.*\.nii$',filename)
+        re_result = re.match('^ALFFMap_sub-A.*\.npy$',filename)
         if re_result:
-            target_filename = os.path.join(target_dir_origin,str(int(filename.split('A')[1].split('.')[0])))
+            target_filename = os.path.join(target_dir_origin,str(int(filename.split('-A')[1].split('.')[0])))
             if not os.path.exists(target_filename + '.npy'):
-                cropped_npy = inner_preprocess_1(os.path.join(source_dir,filename))
-                cropped_npy = minmax_normalize(cropped_npy)
-                np.save(target_filename,cropped_npy)
+#                 cropped_npy = inner_preprocess_1(os.path.join(source_dir,filename))
+#                 cropped_npy = minmax_normalize(cropped_npy)
+#                 np.save(target_filename,cropped_npy)
+                shutil.copyfile(os.path.join(source_dir,filename),target_filename + '.npy')
         pbar.update(int(i*100/(n_bar-1)))
     pbar.finish()
     return
 
+
+
+    
     
 def gen_npy(source_dir,target_dir):
     '''
@@ -107,12 +111,14 @@ def preprocess_main():
     # get training.csv test.csv
     gen_training_test_csv()
     # get preprocessed .npy files
-    source_dir = '/media/woody/Elements/Steve_age_data/ANAT'
+    source_dir = '/media/woody/Elements/Steve_age_data/ALFF_FunRawARWS'
     target_dir = './data_npy'
     gen_npy(source_dir,target_dir)
     # get .tfrecords ready
-    gen_tfrecord('./training.csv',npy_dir='./data_npy/mean_subtracted/',tf_filename='training_data.tfrec')
-    gen_tfrecord('./test.csv',npy_dir='./data_npy/mean_subtracted/',tf_filename='test_data.tfrec')
+#     gen_tfrecord('./training.csv',npy_dir='./data_npy/mean_subtracted/',tf_filename='training_data.tfrec')
+#     gen_tfrecord('./test.csv',npy_dir='./data_npy/mean_subtracted/',tf_filename='test_data.tfrec')
+    gen_tfrecord('./training.csv',npy_dir='./data_npy/origin/',tf_filename='training_data.tfrec')
+    gen_tfrecord('./test.csv',npy_dir='./data_npy/origin/',tf_filename='test_data.tfrec')
     
     my_mkdir('./img')
     my_mkdir('./log')

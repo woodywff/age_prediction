@@ -24,11 +24,8 @@ def decode(serialized_example):
             'id': tf.FixedLenFeature([],tf.int64),
         }
     )
-    arr = tf.decode_raw(features['arr_raw'],tf.float64)
+    arr = tf.decode_raw(features['arr_raw'],tf.float32)
     arr = tf.reshape(arr,list(SHAPE))
-    arr = tf.cast(arr,tf.float32) # to be compliance with the restriction of TypeError: 
-                                  # Value passed to parameter 'input' has DataType int64 not in list of allowed values: 
-                                  # float16, bfloat16, float32, float64
     label = features['label']
     sub_id = features['id']
     
@@ -63,13 +60,18 @@ def get_iterator(for_training=True,num_epochs=1):
         
     return iterators
 
-def try_equal(return_list,info_df):
+def try_equal(return_list,info_df,mean_version=True):
     '''
     this function is going to print the data's information out when there's difference compared with the source data.
     return_list: [arr_batch,label_batch,id_batch, X]
+    
+    mean_version: to use mean_subtracted or origin .npy
     '''
 #     pdb.set_trace()
-    npy_dir='./data_npy/mean_subtracted/'
+    if mean_version:
+        npy_dir='./data_npy/mean_subtracted/'
+    else:
+        npy_dir='./data_npy/origin/'
     decode_arr = return_list[0]
 #     decode_arr = decode_arr.astype(np.float32)
 
@@ -123,11 +125,14 @@ def try_equal(return_list,info_df):
 
 
 
-def tf_varify():
+def tf_varify(mean_version=True):
     '''
     This session checks the difference between data read from .tfrec files and their corresponding source data.
     for training, validation and test sets respectively
     '''
+    
+    
+    
     iterators = get_iterator(num_epochs=NUM_EPOCHS)
     handle = tf.placeholder(tf.string,shape=[])
     iterator = tf.data.Iterator.from_string_handle(handle, iterators[0].output_types)
@@ -154,11 +159,11 @@ def tf_varify():
                 return_list_training = sess.run([arr_batch,label_batch,id_batch, X], feed_dict={handle:train_iterator_handle})
                 
 #                 pdb.set_trace()
-                if not try_equal(return_list_training,info_df_training):
+                if not try_equal(return_list_training,info_df_training,mean_version=mean_version):
                     print('Where am I: in return_list_training.')
                 return_list_val = sess.run([arr_batch,label_batch,id_batch, X], feed_dict={handle:val_iterator_handle})
 #                 pdb.set_trace()
-                if not try_equal(return_list_val,info_df_training):
+                if not try_equal(return_list_val,info_df_training,mean_version=mean_version):
                     print('Where am I: in return_list_val.')
                 duration = time.time() - start_time
 #                     print(type(loss_value))
@@ -170,7 +175,7 @@ def tf_varify():
                                                        feed_dict={handle:test_iterator_handle})
                             
 #                             pdb.set_trace()
-                            if not try_equal(return_list_test,info_df_test):
+                            if not try_equal(return_list_test,info_df_test,mean_version=mean_version):
                                 print('Where am I: in return_list_test.')
                     except tf.errors.OutOfRangeError:
                         print('test finished inside training')

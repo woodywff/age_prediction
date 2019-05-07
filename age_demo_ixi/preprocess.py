@@ -100,35 +100,12 @@ def preprocess_1(source_dir,target_dir_origin):
         if re_result:
             target_filename = os.path.join(target_dir_origin,str(int(filename.split('IXI')[1].split('.')[0])))
             if not os.path.exists(target_filename + '.npy'):
-                cropped_npy = inner_preprocess_1(os.path.join(source_dir,filename))
+                cropped_npy = inner_preprocess_1(os.path.join(source_dir,filename)，rot_ixi=True)
                 cropped_npy = minmax_normalize(cropped_npy)
                 np.save(target_filename,cropped_npy)
         pbar.update(int(i*100/(n_bar-1)))
     pbar.finish()
     return
-
-def inner_preprocess_1(nii_file):
-    '''
-    preprocess
-    step.1: resample
-    step.2: crop and padd
-    
-    nii_file: absolute path of .nii.gz file
-    
-    return: ndarray
-    '''
-    
-    nii_img = nib.load(nii_file)
-    header = nii_img.header
-    pixdim = header['pixdim'][1:4]
-    npy_img = nii_img.get_data()
-    resampled_img = resample(npy_img, pixdim)
-
-    rotated_img = rot_ixi2abide(resampled_img)  # rotate ixi img to the same direction as ABIDE img
-    
-    crop_padded_img = crop_pad(rotated_img,DESIRED_SHAPE)
-    crop_padded_img = np.round(crop_padded_img)
-    return crop_padded_img.astype(int)
 
     
     

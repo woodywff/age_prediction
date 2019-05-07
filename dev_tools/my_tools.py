@@ -144,3 +144,23 @@ def minmax_normalize(img_npy):
     min_value = np.min(img_npy)
     max_value = np.max(img_npy)
     return (img_npy - min_value)/(max_value - min_value)
+
+def z_score_norm(img_npy):
+    '''
+    img_npy: ndarray
+    '''
+    return (img_npy - np.mean(img_npy))/np.std(img_npy)
+
+
+def dist_check(img_npy):
+    '''
+    have a look at the distribution of the img
+    '''
+    f, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15,5))
+    ax1.hist(img_npy.reshape(-1))
+    ax1.set_title('origin')
+    ax2.hist(minmax_normalize(img_npy).reshape(-1))
+    ax2.set_title('minmax')
+    ax3.hist(z_score_norm(img_npy).reshape(-1))
+    ax3.set_title('z score')
+

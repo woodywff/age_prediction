@@ -119,36 +119,12 @@ def preprocess_1(source_dir,target_dir_origin):
         if re_result:
             target_filename = os.path.join(target_dir_origin,filename.split('.')[0])
             if not os.path.exists(target_filename + '.npy'):
-                cropped_npy = inner_preprocess_1(os.path.join(source_dir,filename))
+                cropped_npy = inner_preprocess_1(os.path.join(source_dir,filename),abide=True)
                 cropped_npy = minmax_normalize(cropped_npy)
                 np.save(target_filename,cropped_npy)
         pbar.update(int(i*100/(n_bar-1)))
     pbar.finish()
     return
-
-def inner_preprocess_1(nii_file):
-    '''
-    preprocess
-    step.1: resample
-    step.2: crop and padd
-    
-    nii_file: absolute path of .nii.gz file
-    
-    return: ndarray
-    '''
-    
-    nii_img = nib.load(nii_file)
-    header = nii_img.header
-    pixdim = np.round(header['pixdim'][1:4],4)
-    npy_img = nii_img.get_data()
-    resampled_img = resample(npy_img, pixdim)    # [4,4,4] decides the resolution is shrinked to 1/4 of origin
-    crop_padded_img = crop_pad_abide(resampled_img,DESIRED_SHAPE) # this one is for cropping scenario 
-#     crop_padded_img = crop_pad(resampled_img,DESIRED_SHAPE) # this one is only for padding without cropping operation
-                                                            # this one is more general, so if this works we don't need to use 
-                                                            # the above one.
-    crop_padded_img = np.round(crop_padded_img)
-    return crop_padded_img.astype(int)
-
 
     
 def gen_npy(source_dir,target_dir):

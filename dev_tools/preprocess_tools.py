@@ -33,7 +33,7 @@ def gen_training_test_csv():
     return  
 
 
-def preprocess_2(target_dir_origin,target_dir_mean):
+def preprocess_2(target_dir_origin,target_dir_mean,std_version=False,int_version=False):
     '''
     preprocess
     step.3 subtract mean values
@@ -43,10 +43,13 @@ def preprocess_2(target_dir_origin,target_dir_mean):
     This is because the training data, and only training data, 
     needs to have zero mean for better training performance.
     
+    std_version: whether to divide the standard variation
+    int_version: whether to round() and astype(int) the mean values
     '''
     # get the mean values of all the training data first
-    mean_npy = calc_mean()
-    std_npy = calc_std()
+    mean_npy = calc_mean(int_version=int_version)
+    if std_version:
+        std_npy = calc_std()
     
     npy_list = os.listdir(target_dir_origin)
     
@@ -63,13 +66,44 @@ def preprocess_2(target_dir_origin,target_dir_mean):
                 except FileNotFoundError:
                     print('No such file: ',npy_filename)
                     continue
-#                 subtracted_npy = origin_npy - mean_npy
-                subtracted_npy = (origin_npy - mean_npy)/std_npy
+                if std_version:
+                    subtracted_npy = (origin_npy - mean_npy)/std_npy
+                else:
+                    subtracted_npy = origin_npy - mean_npy
+                
                 np.save(os.path.join(target_dir_mean,filename.split('.')[0]),subtracted_npy)
         pbar.update(int(i*100/(n_bar-1)))
     pbar.finish()
     
     return
+
+
+def inner_preprocess_1(nii_file,new_shape=(67,67,67),abide=False,rot_ixi=False):
+    '''
+    preprocess
+    step.1: resample
+    step.2: crop and padd
+    
+    nii_file: absolute path of .nii.gz file
+    
+    return: ndarray
+    '''
+    
+    nii_img = nib.load(nii_file)
+    header = nii_img.header
+    pixdim = np.round(header['pixdim'][1:4],4)
+    npy_img = nii_img.get_data()
+    resampled_img = resample(npy_img, pixdim)
+    
+    if rot_ixi:
+        rotated_img = rot_ixi2abide(resampled_img)
+    
+    if abide:
+        crop_padded_img = crop_pad_abide(resampled_img,new_shape)
+    else:
+        crop_padded_img = crop_pad(resampled_img,new_shape)
+    crop_padded_img = np.round(crop_padded_img)
+    return crop_padded_img.astype(int)
 
 
 def gen_tfrecord(csv_path_name,npy_dir,tf_filename='tf.tfrecords'):
@@ -105,6 +139,7 @@ def gen_tfrecord(csv_path_name,npy_dir,tf_filename='tf.tfrecords'):
                 
 #             pdb.set_trace()
             label = round(age_list[i],2)
+            arr_npy = arr_npy.astype(np.float32)
             arr_raw = arr_npy.tostring()
             example = tf.train.Example(
                 features = tf.train.Features(
@@ -120,7 +155,7 @@ def gen_tfrecord(csv_path_name,npy_dir,tf_filename='tf.tfrecords'):
         pbar.finish()
     return
 
-def calc_mean():
+def calc_mean(int_version=False):
     '''
     this fun varies in some datasets like IXI, in IXI we use calc_mean_ixi()
     This code is self-content, which means it sucks and could be polished.
@@ -149,8 +184,9 @@ def calc_mean():
         count += 1
     print('Number of training samples: ',count)
     mean_npy = np.mean(npy_list,axis=0)
-#     mean_npy = np.round(mean_npy)
-#     mean_npy = mean_npy.astype(int)
+    if int_version:
+        mean_npy = np.round(mean_npy)
+        mean_npy = mean_npy.astype(int)
     np.save(os.path.join('./data_npy/','mean_npy'),mean_npy)
     return mean_npy
 

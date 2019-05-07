@@ -7,6 +7,7 @@ Using ruyi's model code
 '''
 import sys
 sys.path.append("..")
+sys.path.append("../..")
 # from preprocess import *
 from dev_tools.model_tools import *
 from dev_tools.preprocess_tools import *
@@ -120,11 +121,11 @@ def decode(serialized_example):
             'id': tf.FixedLenFeature([],tf.int64),
         }
     )
-    arr = tf.decode_raw(features['arr_raw'],tf.float64)
+    arr = tf.decode_raw(features['arr_raw'],tf.float32)
     arr = tf.reshape(arr,list(FLAGS.arr_shape))
-    arr = tf.cast(arr,tf.float32) # to be compliance with the restriction of TypeError: 
-                                  # Value passed to parameter 'input' has DataType int64 not in list of allowed values: 
-                                  # float16, bfloat16, float32, float64
+#     arr = tf.cast(arr,tf.float32) # to be compliance with the restriction of TypeError: 
+#                                   # Value passed to parameter 'input' has DataType int64 not in list of allowed values: 
+#                                   # float16, bfloat16, float32, float64
     label = features['label']
     sub_id = features['id']
     
@@ -402,11 +403,11 @@ if __name__ == '__main__':
                         help='Batch size.')
     parser.add_argument('--num_epochs',
                         type=int,
-                        default=100,
+                        default=200,
                         help='Number of epochs to run trainer.')
     parser.add_argument('--MIN_VAL_MSE',
                        type=float,
-                       default=100.0,
+                       default=300.0,
                        help='For validation set, the minimum loss value \
                        less than which the model would be saved.')
     parser.add_argument('--MAX_VAL_PERSON',
