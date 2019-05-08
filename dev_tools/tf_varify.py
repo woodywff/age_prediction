@@ -6,7 +6,6 @@ sys.path.append("..")
 from dev_tools.my_tools import *
 from dev_tools.preprocess_tools import *
 
-NUM_EPOCHS = 10
 SHAPE = np.load('./data_npy/mean_npy.npy').shape
 BATCH_SIZE = 10
 
@@ -125,15 +124,15 @@ def try_equal(return_list,info_df,mean_version=True):
 
 
 
-def tf_varify(mean_version=True):
+def tf_varify(mean_version=True,num_epochs=3):
     '''
     This session checks the difference between data read from .tfrec files and their corresponding source data.
     for training, validation and test sets respectively
+    
+    mean_version: to use './data_npy/mean_subtracted/' or './data_npy/origin/'
     '''
     
-    
-    
-    iterators = get_iterator(num_epochs=NUM_EPOCHS)
+    iterators = get_iterator(num_epochs=num_epochs)
     handle = tf.placeholder(tf.string,shape=[])
     iterator = tf.data.Iterator.from_string_handle(handle, iterators[0].output_types)
     arr_batch,label_batch,id_batch = iterator.get_next()
@@ -181,7 +180,7 @@ def tf_varify(mean_version=True):
                         print('test finished inside training')
                 step += 1
         except tf.errors.OutOfRangeError:
-            print('Done training for %d epochs, %d steps.' %(NUM_EPOCHS,step))
+            print('Done training for %d epochs, %d steps.' %(num_epochs,step))
             
     return
 

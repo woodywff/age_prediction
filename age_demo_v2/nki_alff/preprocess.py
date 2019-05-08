@@ -6,7 +6,7 @@ Dataset: NKI
 '''
 
 import sys
-sys.path.append("..")
+sys.path.append("../..")
 from dev_tools.my_tools import *
 from dev_tools.preprocess_tools import *
 
@@ -104,7 +104,10 @@ def gen_npy(source_dir,target_dir):
 
 
 
-def preprocess_main():
+def preprocess_main(mean_version=False):
+    '''
+    mean_version: to use './data_npy/mean_subtracted/' or './data_npy/origin/'
+    '''
     print_sep('preprocessing starts')
     # get phenotypics.csv
     gen_phenotypics('/media/woody/Elements/Steve_age_data/participants.xlsx')
@@ -115,10 +118,12 @@ def preprocess_main():
     target_dir = './data_npy'
     gen_npy(source_dir,target_dir)
     # get .tfrecords ready
-#     gen_tfrecord('./training.csv',npy_dir='./data_npy/mean_subtracted/',tf_filename='training_data.tfrec')
-#     gen_tfrecord('./test.csv',npy_dir='./data_npy/mean_subtracted/',tf_filename='test_data.tfrec')
-    gen_tfrecord('./training.csv',npy_dir='./data_npy/origin/',tf_filename='training_data.tfrec')
-    gen_tfrecord('./test.csv',npy_dir='./data_npy/origin/',tf_filename='test_data.tfrec')
+    if mean_version:
+        gen_tfrecord('./training.csv',npy_dir='./data_npy/mean_subtracted/',tf_filename='training_data.tfrec')
+        gen_tfrecord('./test.csv',npy_dir='./data_npy/mean_subtracted/',tf_filename='test_data.tfrec')
+    else:
+        gen_tfrecord('./training.csv',npy_dir='./data_npy/origin/',tf_filename='training_data.tfrec')
+        gen_tfrecord('./test.csv',npy_dir='./data_npy/origin/',tf_filename='test_data.tfrec')
     
     my_mkdir('./img')
     my_mkdir('./log')

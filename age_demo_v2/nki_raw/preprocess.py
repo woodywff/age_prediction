@@ -53,7 +53,7 @@ def gen_phenotypics(xls_path_name):
 
 
 
-def preprocess_1(source_dir,target_dir_origin):
+def preprocess_1(source_dir,target_dir_origin,norm_type='minmax'):
     '''
     preprocess using inner_prerpocess_1()
     step.1: resample
@@ -71,17 +71,24 @@ def preprocess_1(source_dir,target_dir_origin):
             target_filename = os.path.join(target_dir_origin,str(int(filename.split('A')[1].split('.')[0])))
             if not os.path.exists(target_filename + '.npy'):
                 cropped_npy = inner_preprocess_1(os.path.join(source_dir,filename))
-                cropped_npy = minmax_normalize(cropped_npy)
+                if norm_type == 'minmax':
+                    cropped_npy = minmax_normalize(cropped_npy)
+                elif norm_type == 'z_score':
+                    cropped_npy = z_score_norm(cropped_npy)
+                else:
+                    print('no norm()')
                 np.save(target_filename,cropped_npy)
         pbar.update(int(i*100/(n_bar-1)))
     pbar.finish()
     return
 
     
-def gen_npy(source_dir,target_dir):
+def gen_npy(source_dir,target_dir,norm_type='minmax'):
     '''
     To read in .nii.gz files and preprocess, including preprocess_1() and preprocess_2(), 
     then output .npy files in target_dir folder.
+    
+    norm_type: minmax or z_score
     '''
 #     pdb.set_trace()
     target_dir_origin = os.path.join(target_dir,'origin')
@@ -93,14 +100,18 @@ def gen_npy(source_dir,target_dir):
         my_mkdir(path)
     
     # preprocess_1: .nii to .npy   
-    preprocess_1(source_dir,target_dir_origin)
+    preprocess_1(source_dir,target_dir_origin,norm_type=norm_type)
     # preprocess_2: subtract mean values
     preprocess_2(target_dir_origin,target_dir_mean)
     return
 
 
 
-def preprocess_main():
+def preprocess_main(mean_version=True,norm_type='minmax'):
+    '''
+    mean_version: to use './data_npy/mean_subtracted/' or './data_npy/origin/'
+    norm_type: minmax or z_score
+    '''
     print_sep('preprocessing starts')
     # get phenotypics.csv
     gen_phenotypics('/media/woody/Elements/Steve_age_data/participants.xlsx')
@@ -109,11 +120,14 @@ def preprocess_main():
     # get preprocessed .npy files
     source_dir = '/media/woody/Elements/Steve_age_data/ANAT'
     target_dir = './data_npy'
-    gen_npy(source_dir,target_dir)
+    gen_npy(source_dir,target_dir,norm_type=norm_type)
     # get .tfrecords ready
-    gen_tfrecord('./training.csv',npy_dir='./data_npy/mean_subtracted/',tf_filename='training_data.tfrec')
-    gen_tfrecord('./test.csv',npy_dir='./data_npy/mean_subtracted/',tf_filename='test_data.tfrec')
-    
+    if mean_version:
+        gen_tfrecord('./training.csv',npy_dir='./data_npy/mean_subtracted/',tf_filename='training_data.tfrec')
+        gen_tfrecord('./test.csv',npy_dir='./data_npy/mean_subtracted/',tf_filename='test_data.tfrec')
+    else:
+        gen_tfrecord('./training.csv',npy_dir='./data_npy/origin/',tf_filename='training_data.tfrec')
+        gen_tfrecord('./test.csv',npy_dir='./data_npy/origin/',tf_filename='test_data.tfrec')
     my_mkdir('./img')
     my_mkdir('./log')
     print_sep('preprocessing ends')

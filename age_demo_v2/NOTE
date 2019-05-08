@@ -1,0 +1,6 @@
+The nki_* all use the same phenotypics.csv
+nki_alff, no minmax or z_score norm(), no mean value substracted, no std deviation devided.
+
+nki_raw, minmax_norm() + mean value substracted.
+
+
