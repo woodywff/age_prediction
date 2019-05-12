@@ -9,6 +9,22 @@ import pdb
 import scipy.ndimage
 import matplotlib.pyplot as plt
 import time
+from tensorflow.python import pywrap_tensorflow 
+from tensorflow.python.tools import inspect_checkpoint as chkp
+
+def show_ckpt(filename):
+    reader = pywrap_tensorflow.NewCheckpointReader(filename) 
+    var_to_shape_map = reader.get_variable_to_shape_map() 
+#     print(var_to_shape_map)
+    print_sep()
+    for key in var_to_shape_map: 
+        print("tensor_name: ", key)
+        
+#     print_sep()
+#     chkp.print_tensors_in_checkpoint_file(filename, tensor_name='', all_tensors=True)
+    return
+
+
 
 def print2d(npy_img,img_name='',save=False,save_name='./test.jpg'):
     '''
