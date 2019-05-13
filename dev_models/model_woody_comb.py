@@ -207,7 +207,6 @@ def training_figure_iterator():
 
 def restored_variable_check(sess,model_1_ckpt,model_2_ckpt):
     '''
-    not stand alone(cannot be used independently)
     '''
     # Variable check
     param_list = tf.global_variables()
@@ -403,16 +402,10 @@ def test_sess(input_iterator,model_path):
         _,_,fc_out_raw = inference4comb(X_raw,trivial=False,
                                        FLAGS_arr_shape=FLAGS.arr_shape_raw)
 
-#         saver = tf.train.Saver([p_name for p_name in tf.global_variables() if 'raw/' in p_name.name])
-#         saver.restore(sess, FLAGS.model_1)
-
     with tf.variable_scope('alff'):
         X_alff = tf.reshape(alff_batch, [-1]+list(FLAGS.arr_shape_alff)+[1])
         _,_,fc_out_alff = inference4comb(X_alff,trivial=False,
                                           FLAGS_arr_shape=FLAGS.arr_shape_alff)
-
-#         saver = tf.train.Saver([p_name for p_name in tf.global_variables() if 'alff/' in p_name.name])
-#         saver.restore(sess, FLAGS.model_2)
 
     with tf.name_scope('last_layer'):
         w = tf.Variable(tf.truncated_normal([256,1],stddev=0.1),name='w')
@@ -431,32 +424,27 @@ def test_sess(input_iterator,model_path):
             restored_variable_check(sess,FLAGS.model_1,FLAGS.model_2)
         
         
-#         test_iterator_handle = sess.run(input_iterator.string_handle())
-#         sess.run(input_iterator.initializer)
-#         test_predicted_ages = []
-#         test_labels = []
-#         try:
-#             while True:
-#                 test_predicted_age,test_label,test_id = sess.run([predicted_age, label_batch,id_batch],
-#                                                 feed_dict={keep_prob:1.0,
-#                                                            is_training_forBN:False,
-#                                                           handle:test_iterator_handle})
-# #                 pdb.set_trace()
-# #                 print("\033[0;30;40m\tTRY:\033[0m")
-# #                 print(test_id)
-#                 test_predicted_ages.append(test_predicted_age)
-#                 test_labels.append(test_label)
-#         except tf.errors.OutOfRangeError:
-#             test_predicted_ages = np.concatenate(tuple(test_predicted_ages))
-#             test_labels = np.concatenate(tuple(test_labels))
+        test_iterator_handle = sess.run(input_iterator.string_handle())
+        sess.run(input_iterator.initializer)
+        test_predicted_ages = []
+        test_labels = []
+        try:
+            while True:
+                test_predicted_age,test_label = sess.run([predicted_age, label_batch],
+                                                         {handle:test_iterator_handle})
+                test_predicted_ages.append(test_predicted_age)
+                test_labels.append(test_label)
+        except tf.errors.OutOfRangeError:
+            test_predicted_ages = np.concatenate(tuple(test_predicted_ages))
+            test_labels = np.concatenate(tuple(test_labels))
 
-#             test_loss = (get_loss(test_predicted_ages,test_labels,tf.constant(0.0))).eval()
-#             test_acc = person_corr(test_predicted_ages,test_labels)
-#             test_mae = calc_mae(test_predicted_ages,test_labels)
+            test_loss = (get_loss(test_predicted_ages,test_labels)).eval()
+            test_acc = person_corr(test_predicted_ages,test_labels)
+            test_mae = calc_mae(test_predicted_ages,test_labels)
 
-#             print('MSE = %.2f, MAE = %.2f, Person correlation coefficient = %.2f.' 
-#                               %(test_loss,test_mae,test_acc))
-#     return test_loss,test_acc,test_mae,test_predicted_ages,test_labels
+            print('MSE = %.2f, MAE = %.2f, Person correlation coefficient = %.2f.' 
+                              %(test_loss,test_mae,test_acc))
+    return test_loss,test_acc,test_mae,test_predicted_ages,test_labels
 
 
 def test_training_set(model_path):
@@ -466,10 +454,10 @@ def test_training_set(model_path):
     '''
     with tf.Graph().as_default():
         iterator = training_figure_iterator()[0]
-        test_sess(iterator,model_path)
-#         test_loss, test_acc, test_mae, pred_age, chro_age= test_sess(iterator,model_path)
-#         draw_person_corr(pred_age,chro_age,test_loss,test_acc,test_mae,title='Training Data',
-#                          save_filename='training_corr_'+model_path.split('_')[1]+'_woody.pdf')
+#         test_sess(iterator,model_path)
+        test_loss, test_acc, test_mae, pred_age, chro_age= test_sess(iterator,model_path)
+        draw_person_corr(pred_age,chro_age,test_loss,test_acc,test_mae,title='Training Data',
+                         save_filename='training_corr_'+model_path.split('.')[1].split('_')[-1]+'_woody.pdf')
     return
 
 def test_test_set(model_path):
@@ -481,7 +469,7 @@ def test_test_set(model_path):
         iterator = get_iterator(for_training=False)[0]
         test_loss, test_acc, test_mae, pred_age, chro_age= test_sess(iterator,model_path)
         draw_person_corr(pred_age,chro_age,test_loss,test_acc,test_mae,title='Test Data',
-                         save_filename='test_corr_'+model_path.split('_')[1]+'_woody.pdf')
+                         save_filename='test_corr_'+model_path.split('.')[1].split('_')[-1]+'_woody.pdf')
     return
 
 
@@ -496,9 +484,9 @@ def main(_):
     if not FLAGS.for_test:
         run_training()
     test_training_set(FLAGS.saver_dir_mse)
-#     test_training_set(FLAGS.saver_dir_person)
-#     test_test_set(FLAGS.saver_dir_mse)
-#     test_test_set(FLAGS.saver_dir_person)
+    test_training_set(FLAGS.saver_dir_person)
+    test_test_set(FLAGS.saver_dir_mse)
+    test_test_set(FLAGS.saver_dir_person)
 
 # python model_woody_comb.py --model_1=<.ckpt> --model_2=<.ckpt> 
 #                            --saver_dir_mse=<best mse.ckpt> --saver_dir_person=<best pearson.ckpt>
