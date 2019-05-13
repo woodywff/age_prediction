@@ -1,24 +1,17 @@
-'''
-10% for test, 90% for training. (Option: k-folds cross validation, not implemented yet.)
-
-Using 3D-CNN model code of my own
-'''
+# to restore two networks
 import sys
-sys.path.append("..")
+sys.path.append("../")
 sys.path.append("../..")
-# from preprocess import *
 from dev_tools.model_tools import *
 from dev_tools.preprocess_tools import *
 import argparse
 
-
 FLAGS = None
-
 
 def print_activations(t):
     print(t.op.name, ' ', t.get_shape().as_list())
 
-def inference(X, keep_prob, is_training_forBN, trivial=True):
+def inference4comb(X, keep_prob=1.0, is_training_forBN=False, trivial=True, FLAGS_arr_shape=(67,67,67)):
     l2_loss = 0
     with tf.name_scope('l1_conv3d') as scope:
         w = tf.Variable(tf.truncated_normal([5,5,5,1,FLAGS.sizeof_kernel_1], stddev=0.1), name='kernel')
@@ -124,6 +117,8 @@ def inference(X, keep_prob, is_training_forBN, trivial=True):
         temp_output = tf.matmul(fc_out,w) + b
         temp_output = tf.layers.batch_normalization(temp_output,training=is_training_forBN)
         fc_out = tf.nn.relu(temp_output, name='fc_out2')
+        
+#         print(fc_out.name, id(fc_out))
         dropout = tf.nn.dropout(fc_out,keep_prob=keep_prob, name='dropout2')
         
         l2_loss += tf.nn.l2_loss(w)
@@ -142,9 +137,9 @@ def inference(X, keep_prob, is_training_forBN, trivial=True):
         if trivial:
             print_activations(final_output)
     
-    return final_output, l2_loss
+    return final_output, l2_loss, fc_out
         
-def get_loss(predict_batches,label_batches,l2_loss):
+def get_loss(predict_batches,label_batches):
     '''
     we are not sure the shape of predict_batches,label_batches, (?,1) or (?,),
     so we reshape them into (?,) first.
@@ -152,19 +147,8 @@ def get_loss(predict_batches,label_batches,l2_loss):
     with tf.name_scope('cross_entropy'):
         predict_batches = tf.reshape(predict_batches,[-1,1])
         label_batches = tf.reshape(label_batches,[-1,1])
-        cost = tf.reduce_mean(tf.square(predict_batches - label_batches)) + FLAGS.l2_epsilon * l2_loss
+        cost = tf.reduce_mean(tf.square(predict_batches - label_batches))
     return cost
-
-
-def trainning(loss):
-    '''
-    The weird things are for Batch Normalization.
-    '''
-#     train_op = tf.train.RMSPropOptimizer(lr,0.9).minimize(loss)
-    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-    with tf.control_dependencies(update_ops):
-        train_op = tf.train.AdamOptimizer(1e-4).minimize(loss)
-    return train_op      
 
 
 
@@ -175,17 +159,20 @@ def decode(serialized_example):
     features = tf.parse_single_example(
         serialized_example,
         features={
-            'arr_raw':tf.FixedLenFeature([],tf.string),
+            'npy_raw':tf.FixedLenFeature([],tf.string),
+            'npy_alff':tf.FixedLenFeature([],tf.string),
             'label': tf.FixedLenFeature([],tf.float32),
-            'id': tf.FixedLenFeature([],tf.int64),
+            'id': tf.FixedLenFeature([],tf.int64)
         }
     )
-    arr = tf.decode_raw(features['arr_raw'],tf.float32)
-    arr = tf.reshape(arr,list(FLAGS.arr_shape))
+    npy_raw = tf.decode_raw(features['npy_raw'],tf.float32)
+    npy_raw = tf.reshape(npy_raw,list(FLAGS.arr_shape_raw))
+    npy_alff = tf.decode_raw(features['npy_alff'],tf.float32)
+    npy_alff = tf.reshape(npy_alff,list(FLAGS.arr_shape_alff))
     label = features['label']
     sub_id = features['id']
     
-    return arr,label,sub_id
+    return npy_raw, npy_alff,label,sub_id
 
 
 def get_iterator(for_training=True,num_epochs=1):
@@ -216,50 +203,98 @@ def training_figure_iterator():
     dataset = dataset.map(decode)
     dataset = dataset.batch(FLAGS.batch_size)
     return [dataset.make_initializable_iterator()]
-    
-    
-    
-    
+
+
+def restored_variable_check(sess,model_1_ckpt,model_2_ckpt):
+    '''
+    not stand alone(cannot be used independently)
+    '''
+    # Variable check
+    param_list = tf.global_variables()
+    reader_raw = pywrap_tensorflow.NewCheckpointReader(model_1_ckpt)
+    reader_alff = pywrap_tensorflow.NewCheckpointReader(model_2_ckpt)
+
+    pbar = ProgressBar().start()
+    n_bar = len(param_list)
+    for i,param in enumerate(param_list):
+        if 'alff/' in param.name:
+            if np.sum(sess.graph.get_tensor_by_name(param.name).eval() - 
+                  reader_alff.get_tensor(param.name.split(':')[0])) != 0:
+                print('\033[31m',param)
+        elif 'raw/' in param.name:
+            if np.sum(sess.graph.get_tensor_by_name(param.name).eval() - 
+                  reader_raw.get_tensor(param.name.split(':')[0])) != 0:
+                print('\033[31m',param)
+        else:
+            print('\033[31mUnknown variable: ',param)
+    #                 break
+        pbar.update(int(i*100/(n_bar-1)))
+    pbar.finish()
+    print('Check finished.')
+    return
+
+
 def run_training():
-    '''
-    training set: training_data.tfrec
-    valadation set: test_data.tfrec
-    
-    there are three iterator handles:
-        train_iterator_handle: for training
-        val_iterator_handle: for calculation and drawing of the training set's mse and person correlation coefficient
-        test_iterator_handle: for validation
-    '''
     return_list = []
     MSE_SAVED = False
     PERSON_SAVED = False
     
     with tf.Graph().as_default():
-        num_epochs = FLAGS.num_epochs
-        iterators = get_iterator(num_epochs=num_epochs)
-        handle = tf.placeholder(tf.string,shape=[])
-        iterator = tf.data.Iterator.from_string_handle(handle, iterators[0].output_types)
-        arr_batch,label_batch,id_batch = iterator.get_next()
-        
-#         pdb.set_trace()
-        with tf.name_scope('input_woody') as scope:
-            X = tf.reshape(arr_batch, [-1]+list(FLAGS.arr_shape)+[1],name='input_X')
-            keep_prob = tf.placeholder(tf.float32, name='keep_prob')
-            is_training_forBN = tf.placeholder(tf.bool, name='is_training_forBN')
-        
-        predicted_age,l2_loss = inference(X,keep_prob,is_training_forBN,trivial=False)
-
-        loss = get_loss(predicted_age,label_batch,l2_loss)
-    
-        train_op = trainning(loss)
-    
-        init_op = tf.group(tf.global_variables_initializer(),
-                           tf.local_variables_initializer())
-    
-        saver = tf.train.Saver()
-
-    
         with tf.Session() as sess:
+            num_epochs = FLAGS.num_epochs
+            iterators = get_iterator(num_epochs=num_epochs)
+            handle = tf.placeholder(tf.string,shape=[])
+            iterator = tf.data.Iterator.from_string_handle(handle, iterators[0].output_types)
+            test_iterator = get_iterator(for_training=False)[0]
+            raw_batch,alff_batch,label_batch,_ = iterator.get_next()
+            
+            with tf.variable_scope('raw'):
+                X_raw = tf.reshape(raw_batch, [-1]+list(FLAGS.arr_shape_raw)+[1])
+                _,_,fc_out_raw = inference4comb(X_raw,trivial=False,
+                                               FLAGS_arr_shape=FLAGS.arr_shape_raw)
+
+                saver = tf.train.Saver([p_name for p_name in tf.global_variables() if 'raw/' in p_name.name])
+                saver.restore(sess, FLAGS.model_1)
+
+            with tf.variable_scope('alff'):
+                X_alff = tf.reshape(alff_batch, [-1]+list(FLAGS.arr_shape_alff)+[1])
+                _,_,fc_out_alff = inference4comb(X_alff,trivial=False,
+                                                  FLAGS_arr_shape=FLAGS.arr_shape_alff)
+
+                saver = tf.train.Saver([p_name for p_name in tf.global_variables() if 'alff/' in p_name.name])
+                saver.restore(sess, FLAGS.model_2)
+
+            # Variable check
+            if FLAGS.variable_check:
+                restored_variable_check(sess,FLAGS.model_1,FLAGS.model_2)
+
+            with tf.name_scope('last_layer'):
+                w = tf.Variable(tf.truncated_normal([256,1],stddev=0.1),name='w')
+                b = tf.Variable(tf.constant(0.1,shape=[1]),name='b')
+                predicted_age = tf.add(tf.matmul(tf.concat([fc_out_raw,fc_out_alff],1),w), b, name='final_output')
+            
+            loss = get_loss(predicted_age,label_batch)
+            optimizer = tf.train.AdamOptimizer(1e-4)
+
+            train_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
+                                     "last_layer")
+#             print(train_vars)
+            train_op = optimizer.minimize(loss, var_list=train_vars)
+
+            # Variable init
+            uninitialized_vars = []
+            for var in tf.global_variables():
+                try:
+                    sess.run(var)
+                except tf.errors.FailedPreconditionError:
+                    uninitialized_vars.append(var)
+#             print(uninitialized_vars)
+            initialize_op = tf.variables_initializer(uninitialized_vars)
+            sess.run(initialize_op)
+            
+#             print([x for x in tf.get_default_graph().get_operations() if 'Placeholder' in x.type])
+            
+            saver = tf.train.Saver()
             losses = []
             acces = []
             steps = []
@@ -268,55 +303,37 @@ def run_training():
             test_acces = []
             test_steps = []
             
-#             pdb.set_trace()
-            sess.run(init_op)
             train_iterator_handle = sess.run(iterators[0].string_handle())
             val_iterator_handle = sess.run(iterators[1].string_handle())
-            
-            test_iterator = get_iterator(for_training=False)[0]
             test_iterator_handle = sess.run(test_iterator.string_handle())
             
             print('Let\'s get started to train!')
             start_time = time.time()
-            
             try:
                 step = 0
                 min_val_mse = FLAGS.MIN_VAL_MSE
                 max_val_person = FLAGS.MAX_VAL_PERSON
                 while True:
-                    sess.run(train_op, feed_dict={keep_prob:0.5,
-                                                 is_training_forBN:True,
-                                                handle:train_iterator_handle})
+                    sess.run(train_op, {handle:train_iterator_handle})
 
-                    loss_value,val_pred_age,val_chro_age = sess.run([loss,predicted_age,label_batch],feed_dict={keep_prob:1.0,
-                                                       is_training_forBN:False,
-                                                      handle:val_iterator_handle})
+                    loss_value,val_pred_age,val_chro_age = sess.run([loss,predicted_age,label_batch],
+                                                                    {handle:val_iterator_handle})
                     acc_value = person_corr(val_pred_age,val_chro_age)
-
-                    if step == 1:
-                        saver.save(sess, './log/model_woody_trial.ckpt')
-                        return
-
                     if step % 100 == 0:
                         sess.run(test_iterator.initializer)
                         test_predicted_ages = []
                         test_labels = []
                         try:
                             while True:
-                                test_predicted_age,test_label,test_id = sess.run([predicted_age,label_batch,id_batch],
-                                                                feed_dict={keep_prob:1.0,
-                                                                           is_training_forBN:False,
-                                                                          handle:test_iterator_handle})
-#                                 pdb.set_trace()
-#                                 print("\033[0;30;40m\tTRY:\033[0m")
-#                                 print(test_id)
+                                test_predicted_age,test_label = sess.run([predicted_age,label_batch],
+                                                                         {handle:test_iterator_handle})
                                 test_predicted_ages.append(test_predicted_age)
                                 test_labels.append(test_label)
                         except tf.errors.OutOfRangeError:
 #                             pdb.set_trace()
                             test_predicted_ages = np.concatenate(tuple(test_predicted_ages))
                             test_labels = np.concatenate(tuple(test_labels))
-                            test_loss = (get_loss(test_predicted_ages,test_labels,tf.constant(0.0))).eval()
+                            test_loss = (get_loss(test_predicted_ages,test_labels)).eval()
                             test_acc = person_corr(test_predicted_ages,test_labels)
                             test_losses.append(test_loss)
                             test_acces.append(test_acc)
@@ -325,7 +342,7 @@ def run_training():
                             training_loss = %.2f, training_acc = %.2f\n \
                             val_loss(test_loss) = %.2f, val_acc(test_acc) = %.2f' 
                                   %(step,loss_value,acc_value,test_loss,test_acc))
-                            
+
                             if test_loss < min_val_mse:
                                 min_val_mse = test_loss
                                 print('best mse model: mse of validation set = %.2f, step = %d' %(min_val_mse,step))
@@ -367,6 +384,8 @@ def run_training():
         return -1
     else:
         return 0 
+            
+    return 
 
 
 def test_sess(input_iterator,model_path):
@@ -377,48 +396,67 @@ def test_sess(input_iterator,model_path):
     '''
     handle = tf.placeholder(tf.string,shape=[])
     iterator = tf.data.Iterator.from_string_handle(handle, input_iterator.output_types)
-    arr_batch,label_batch,id_batch = iterator.get_next()
-    X = tf.reshape(arr_batch, [-1]+list(FLAGS.arr_shape)+[1])
-    keep_prob = tf.placeholder(tf.float32, name='keep_prob')
+    raw_batch,alff_batch,label_batch,_ = iterator.get_next()
 
-    is_training_forBN = tf.placeholder(tf.bool, name='is_training_forBN')
+    with tf.variable_scope('raw'):
+        X_raw = tf.reshape(raw_batch, [-1]+list(FLAGS.arr_shape_raw)+[1])
+        _,_,fc_out_raw = inference4comb(X_raw,trivial=False,
+                                       FLAGS_arr_shape=FLAGS.arr_shape_raw)
 
-    predicted_age,l2_loss = inference(X,keep_prob,is_training_forBN)
+#         saver = tf.train.Saver([p_name for p_name in tf.global_variables() if 'raw/' in p_name.name])
+#         saver.restore(sess, FLAGS.model_1)
 
-    loss = get_loss(predicted_age,label_batch,l2_loss)
+    with tf.variable_scope('alff'):
+        X_alff = tf.reshape(alff_batch, [-1]+list(FLAGS.arr_shape_alff)+[1])
+        _,_,fc_out_alff = inference4comb(X_alff,trivial=False,
+                                          FLAGS_arr_shape=FLAGS.arr_shape_alff)
+
+#         saver = tf.train.Saver([p_name for p_name in tf.global_variables() if 'alff/' in p_name.name])
+#         saver.restore(sess, FLAGS.model_2)
+
+    with tf.name_scope('last_layer'):
+        w = tf.Variable(tf.truncated_normal([256,1],stddev=0.1),name='w')
+        b = tf.Variable(tf.constant(0.1,shape=[1]),name='b')
+        predicted_age = tf.add(tf.matmul(tf.concat([fc_out_raw,fc_out_alff],1),w), b, name='final_output')
+
+    loss = get_loss(predicted_age,label_batch)
 
     saver = tf.train.Saver()
-#         pdb.set_trace()
     with tf.Session() as sess:
         saver.restore(sess, model_path)
         print('Model loaded successfully.')
-        test_iterator_handle = sess.run(input_iterator.string_handle())
-        sess.run(input_iterator.initializer)
-        test_predicted_ages = []
-        test_labels = []
-        try:
-            while True:
-                test_predicted_age,test_label,test_id = sess.run([predicted_age, label_batch,id_batch],
-                                                feed_dict={keep_prob:1.0,
-                                                           is_training_forBN:False,
-                                                          handle:test_iterator_handle})
-#                 pdb.set_trace()
-#                 print("\033[0;30;40m\tTRY:\033[0m")
-#                 print(test_id)
-                test_predicted_ages.append(test_predicted_age)
-                test_labels.append(test_label)
-        except tf.errors.OutOfRangeError:
-            test_predicted_ages = np.concatenate(tuple(test_predicted_ages))
-            test_labels = np.concatenate(tuple(test_labels))
+        
+#         pdb.set_trace()
+        if FLAGS.variable_check:
+            restored_variable_check(sess,FLAGS.model_1,FLAGS.model_2)
+        
+        
+#         test_iterator_handle = sess.run(input_iterator.string_handle())
+#         sess.run(input_iterator.initializer)
+#         test_predicted_ages = []
+#         test_labels = []
+#         try:
+#             while True:
+#                 test_predicted_age,test_label,test_id = sess.run([predicted_age, label_batch,id_batch],
+#                                                 feed_dict={keep_prob:1.0,
+#                                                            is_training_forBN:False,
+#                                                           handle:test_iterator_handle})
+# #                 pdb.set_trace()
+# #                 print("\033[0;30;40m\tTRY:\033[0m")
+# #                 print(test_id)
+#                 test_predicted_ages.append(test_predicted_age)
+#                 test_labels.append(test_label)
+#         except tf.errors.OutOfRangeError:
+#             test_predicted_ages = np.concatenate(tuple(test_predicted_ages))
+#             test_labels = np.concatenate(tuple(test_labels))
 
-            test_loss = (get_loss(test_predicted_ages,test_labels,tf.constant(0.0))).eval()
-            test_acc = person_corr(test_predicted_ages,test_labels)
-            test_mae = calc_mae(test_predicted_ages,test_labels)
+#             test_loss = (get_loss(test_predicted_ages,test_labels,tf.constant(0.0))).eval()
+#             test_acc = person_corr(test_predicted_ages,test_labels)
+#             test_mae = calc_mae(test_predicted_ages,test_labels)
 
-            print('MSE = %.2f, MAE = %.2f, Person correlation coefficient = %.2f.' 
-                              %(test_loss,test_mae,test_acc))
-    return test_loss,test_acc,test_mae,test_predicted_ages,test_labels
-
+#             print('MSE = %.2f, MAE = %.2f, Person correlation coefficient = %.2f.' 
+#                               %(test_loss,test_mae,test_acc))
+#     return test_loss,test_acc,test_mae,test_predicted_ages,test_labels
 
 
 def test_training_set(model_path):
@@ -428,9 +466,10 @@ def test_training_set(model_path):
     '''
     with tf.Graph().as_default():
         iterator = training_figure_iterator()[0]
-        test_loss, test_acc, test_mae, pred_age, chro_age= test_sess(iterator,model_path)
-        draw_person_corr(pred_age,chro_age,test_loss,test_acc,test_mae,title='Training Data',
-                         save_filename='training_corr_'+model_path.split('_')[1]+'_woody.pdf')
+        test_sess(iterator,model_path)
+#         test_loss, test_acc, test_mae, pred_age, chro_age= test_sess(iterator,model_path)
+#         draw_person_corr(pred_age,chro_age,test_loss,test_acc,test_mae,title='Training Data',
+#                          save_filename='training_corr_'+model_path.split('_')[1]+'_woody.pdf')
     return
 
 def test_test_set(model_path):
@@ -450,25 +489,36 @@ def test_test_set(model_path):
 
 def main(_):
 #     pdb.set_trace()
-    arr = np.load('../nki_raw/data_npy/mean_npy.npy')
-    FLAGS.arr_shape = arr.shape
+    FLAGS.arr_shape_raw = np.load('../nki_raw/data_npy/mean_npy.npy').shape
+
+    FLAGS.arr_shape_alff = np.load('../nki_alff/data_npy/mean_npy.npy').shape
     
     if not FLAGS.for_test:
         run_training()
-#    test_training_set(FLAGS.saver_dir_mse)
-#    test_training_set(FLAGS.saver_dir_person)
-#    test_test_set(FLAGS.saver_dir_mse)
-#    test_test_set(FLAGS.saver_dir_person)
+    test_training_set(FLAGS.saver_dir_mse)
+#     test_training_set(FLAGS.saver_dir_person)
+#     test_test_set(FLAGS.saver_dir_mse)
+#     test_test_set(FLAGS.saver_dir_person)
 
+# python model_woody_comb.py --model_1=<.ckpt> --model_2=<.ckpt> 
+#                            --saver_dir_mse=<best mse.ckpt> --saver_dir_person=<best pearson.ckpt>
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--model_1',
+                       type=str,
+                       default="./log/model_mse_woody_raw.ckpt",
+                       help='model 1\' checkpoint.')
+    parser.add_argument('--model_2',
+                       type=str,
+                       default="./log/model_mse_woody_alff.ckpt",
+                       help='model 2\' checkpoint.')
     parser.add_argument('--saver_dir_mse',
                        type=str,
-                       default="./log/model_mse_woody.ckpt",
+                       default="./log/comb_mse_raw_alff_mse.ckpt",
                        help='Directory to save checkpoint.')
     parser.add_argument('--saver_dir_person',
                        type=str,
-                       default="./log/model_person_woody.ckpt",
+                       default="./log/comb_mse_raw_alff_pearson.ckpt",
                        help='Directory to save checkpoint.')
     parser.add_argument('--l2_epsilon',
                        type=float,
@@ -507,6 +557,10 @@ if __name__ == '__main__':
                        type=bool,
                        default=False,
                        help='If it is True, the program only runs the test part.')
+    parser.add_argument('--variable_check',
+                       type=bool,
+                       default=False,
+                       help='Have a check on the restored variables.')
     
     FLAGS, unparsed = parser.parse_known_args()
     tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
