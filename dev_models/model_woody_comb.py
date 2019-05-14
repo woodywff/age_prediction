@@ -266,6 +266,7 @@ def run_training():
             # Variable check
             if FLAGS.variable_check:
                 restored_variable_check(sess,FLAGS.model_1,FLAGS.model_2)
+                return
 
             with tf.name_scope('last_layer'):
                 w = tf.Variable(tf.truncated_normal([256,1],stddev=0.1),name='w')
@@ -366,10 +367,10 @@ def run_training():
                 end_time = time.time()
                 print('time elapsed: '+sec2hms(end_time-start_time))
                 return_list = [steps,losses,acces,test_steps,test_losses,test_acces]
-                return_list_path_name = './img/training_return_list_woody'
-                if os.path.exists(return_list_path_name + '.npy'):
-                    print(return_list_path_name + '.npy exists already. Cover it...')
-                np.save(return_list_path_name, np.array(return_list))
+                
+                if os.path.exists(FLAGS.return_list_path_name + '.npy'):
+                    print(FLAGS.return_list_path_name + '.npy exists already. Cover it...')
+                np.save(FLAGS.return_list_path_name, np.array(return_list))
                 
                 if not MSE_SAVED:
                     saver.save(sess, FLAGS.saver_dir_mse)
@@ -422,6 +423,7 @@ def test_sess(input_iterator,model_path):
 #         pdb.set_trace()
         if FLAGS.variable_check:
             restored_variable_check(sess,FLAGS.model_1,FLAGS.model_2)
+            return
         
         
         test_iterator_handle = sess.run(input_iterator.string_handle())
@@ -454,10 +456,12 @@ def test_training_set(model_path):
     '''
     with tf.Graph().as_default():
         iterator = training_figure_iterator()[0]
-#         test_sess(iterator,model_path)
+        if FLAGS.variable_check:
+            test_sess(iterator,model_path)
+            return
         test_loss, test_acc, test_mae, pred_age, chro_age= test_sess(iterator,model_path)
         draw_person_corr(pred_age,chro_age,test_loss,test_acc,test_mae,title='Training Data',
-                         save_filename='training_corr_'+model_path.split('.')[1].split('_')[-1]+'_woody.pdf')
+                         save_filename='training_corr_'+model_path.split('./log/')[1].split('.ckpt')[0]+'_woody.pdf')
     return
 
 def test_test_set(model_path):
@@ -467,9 +471,12 @@ def test_test_set(model_path):
     '''
     with tf.Graph().as_default():
         iterator = get_iterator(for_training=False)[0]
+        if FLAGS.variable_check:
+            test_sess(iterator,model_path)
+            return
         test_loss, test_acc, test_mae, pred_age, chro_age= test_sess(iterator,model_path)
         draw_person_corr(pred_age,chro_age,test_loss,test_acc,test_mae,title='Test Data',
-                         save_filename='test_corr_'+model_path.split('.')[1].split('_')[-1]+'_woody.pdf')
+                         save_filename='test_corr_'+model_path.split('./log/')[1].split('.ckpt')[0]+'_woody.pdf')
     return
 
 
@@ -481,6 +488,13 @@ def main(_):
 
     FLAGS.arr_shape_alff = np.load('../nki_alff/data_npy/mean_npy.npy').shape
     
+    if FLAGS.best_pearson_comb:
+        FLAGS.model_1 = './log/model_person_woody_raw.ckpt'
+        FLAGS.model_2 = './log/model_person_woody_alff.ckpt'
+        FLAGS.saver_dir_mse = './log/comb_pearson_raw_alff_mse.ckpt'
+        FLAGS.saver_dir_person = './log/comb_pearson_raw_alff_pearson.ckpt'
+        FLAGS.return_list_path_name = "./img/training_return_list_comb_pearson_raw_alff"
+    
     if not FLAGS.for_test:
         run_training()
     test_training_set(FLAGS.saver_dir_mse)
@@ -488,8 +502,6 @@ def main(_):
     test_test_set(FLAGS.saver_dir_mse)
     test_test_set(FLAGS.saver_dir_person)
 
-# python model_woody_comb.py --model_1=<.ckpt> --model_2=<.ckpt> 
-#                            --saver_dir_mse=<best mse.ckpt> --saver_dir_person=<best pearson.ckpt>
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_1',
@@ -549,6 +561,15 @@ if __name__ == '__main__':
                        type=bool,
                        default=False,
                        help='Have a check on the restored variables.')
+    parser.add_argument('--best_pearson_comb',
+                       type=bool,
+                       default=False,
+                       help='Combination of best pearson raw and alff.')
+    parser.add_argument('--return_list_path_name',
+                       type=str,
+                       default="./img/training_return_list_comb_mse_raw_alff",
+                       help='Where to save the training process data.')
+    
     
     FLAGS, unparsed = parser.parse_known_args()
     tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
