@@ -16,13 +16,14 @@ For NKI dataset we also tried the functional modalities including ALFF, FALFF an
 This project had been developed under the environment of
 ```
 Ubuntu16.04 + python3.5 + tensorflow-gpu1.11.0
-
 ```
 Because the downloaded datasets were stored on my mobile HDD, you may encounter some path name like `/media/woody/Elements`, that's my disk's name, you could change it into your pathway.
 
 Anyway, you could run it like this (in jupyter notebook):
 ```
-# Mostly because of the data storing structure is different from one another, each dataset has its own preprocessing function.  
+# Mostly because of the data storing structure differs from one dataset to another, 
+# each dataset has its own preprocessing function.  
+
 import preprocess
 preprocess.preprocess_main()
 
