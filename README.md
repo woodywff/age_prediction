@@ -31,3 +31,6 @@ preprocess.preprocess_main()
 
 ```
 The `Script.ipynb` gives out a brief show of some illustration functions you may wanna invoke when checking the training and test results.
+
+## Acknowledgments
+- Thanks for the help from [Zach Lyu](https://github.com/bijiuni), this work has referred to his [repository](https://github.com/bijiuni/brain_age)
